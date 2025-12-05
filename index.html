@@ -104,21 +104,6 @@
             30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
             40%, 60% { transform: translate3d(4px, 0, 0); }
         }
-
-        /* Styles pour les onglets */
-        .tab-active {
-            background-color: #4f46e5; /* Indigo */
-            color: white;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        .tab-inactive {
-            background-color: #1e293b; /* Slate 800 */
-            color: #94a3b8; /* Slate 400 */
-        }
-        .tab-inactive:hover {
-            background-color: #334155;
-            color: white;
-        }
     </style>
 </head>
 <body>
@@ -351,7 +336,6 @@
         }
 
         // --- FONCTIONS ONLINE (GLOBALES) ---
-        // CRUCIAL: Attacher ces fonctions à window pour qu'elles soient accessibles partout
         window.saveScoreOnline = async function(score, difficulty, pilotName) {
             if (!db || !currentUser) return;
             const indicator = document.getElementById('savingIndicator');
@@ -479,7 +463,8 @@
             function drawMenuBackground(){ctx.fillStyle='#0f172a';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#1e293b';for(let i=0;i<50;i++){ctx.beginPath();ctx.arc(Math.random()*canvas.width,Math.random()*canvas.height,Math.random()*2,0,Math.PI*2);ctx.fill();}drawElephantLogo(ctx,canvas.width/2,canvas.height/2-50);}
 
             function startGame(diff){initAudio();currentTempo=baseTempo;totalMinesSpawned=0;if(soundEnabled){clearTimeout(timerID);nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();}currentDifficulty=diff;score=0;gameTime=0;foodTimer=0;enemyTimer=0;player.speed=DIFFICULTIES[diff].playerSpeed;document.getElementById('scoreDisplay').textContent='0';document.getElementById('mineDisplay').innerHTML='1<span class="text-sm text-slate-500">/'+CONFIG.maxMines+'</span>';document.getElementById('highScoreDisplay').textContent=highScores[diff];isGameOver=false;document.getElementById('menuScreen').style.opacity='0';document.getElementById('gameOverScreen').classList.add('hidden');setTimeout(()=>{document.getElementById('menuScreen').style.display='none';},300);document.getElementById('hud').style.opacity='1';player.x=canvas.width/2;player.y=canvas.height/2;foods.length=0;enemies.length=0;particles.length=0;for(let i=0;i<3;i++)spawnFood();spawnEnemy();lastTime=performance.now();cancelAnimationFrame(animationId);gameLoop(lastTime);}
-            function gameOver(){isGameOver=true;document.body.classList.add('shake-screen');setTimeout(()=>document.body.classList.remove('shake-screen'),500);playExplosion();document.getElementById('hud').style.opacity='0';clearTimeout(timerID);let isNew=false;if(score>highScores[currentDifficulty]){highScores[currentDifficulty]=score;localStorage.setItem(CONFIG.storagePrefix+currentDifficulty,score);updateBadges();isNew=true;}saveGameHistory(score,currentDifficulty);if(typeof saveScoreOnline==='function')saveScoreOnline(score,currentDifficulty,sailorName);document.getElementById('finalScore').textContent=score;document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];document.getElementById('newRecordBadge').classList.toggle('hidden',!isNew);document.getElementById('noRecordBadge').classList.toggle('hidden',isNew);document.getElementById('gameOverScreen').classList.remove('hidden');}
+            
+            function gameOver(){isGameOver=true;document.body.classList.add('shake-screen');setTimeout(()=>document.body.classList.remove('shake-screen'),500);playExplosion();document.getElementById('hud').style.opacity='0';clearTimeout(timerID);let isNew=false;if(score>highScores[currentDifficulty]){highScores[currentDifficulty]=score;localStorage.setItem(CONFIG.storagePrefix+currentDifficulty,score);updateBadges();isNew=true;}saveGameHistory(score,currentDifficulty);if(typeof window.saveScoreOnline==='function')window.saveScoreOnline(score,currentDifficulty,sailorName);document.getElementById('finalScore').textContent=score;document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];document.getElementById('newRecordBadge').classList.toggle('hidden',!isNew);document.getElementById('noRecordBadge').classList.toggle('hidden',isNew);setTimeout(() => { document.getElementById('gameOverScreen').classList.remove('hidden'); }, 1500);}
             
             function spawnFood(){if(foods.length>=5)return;let x,y,ok=false,trys=0;while(!ok&&trys<10){x=50+Math.random()*(canvas.width-100);y=50+Math.random()*(canvas.height-100);ok=true;for(let f of foods)if(Math.hypot(x-f.x,y-f.y)<100)ok=false;trys++;}foods.push({x,y,radius:8,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,color:'#fbbf24'});}
             function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMinesSpawned++;if(totalMinesSpawned%10===0)currentTempo+=10;let x,y,trys=0;do{x=20+Math.random()*(canvas.width-40);y=20+Math.random()*(canvas.height-40);trys++;}while(Math.hypot(x-player.x,y-player.y)<200&&trys<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;}
@@ -521,7 +506,7 @@
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
             document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
-            document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
+            document.getElementById('btnReturnMenu').addEventListener('click',returnToMenu);
             
             // Scores UI
             const scoresScreen = document.getElementById('scoresScreen');
