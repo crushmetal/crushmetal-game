@@ -14,10 +14,10 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase Compat Scripts (Fonctionne partout) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <!-- Firebase Compat Scripts (Chargement différé pour ne pas bloquer) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap');
@@ -30,6 +30,8 @@
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
+            /* Fallback pour anciens navigateurs */
+            height: 100vh; 
             height: 100dvh; 
             display: flex;
             flex-direction: column;
@@ -73,7 +75,6 @@
             overflow: hidden;
             pointer-events: auto; 
             user-select: none;
-            /* Fix mobile tap highlight */
             -webkit-tap-highlight-color: transparent;
         }
         .btn-menu:active { transform: skew(-10deg) scale(0.95); }
@@ -202,7 +203,7 @@
     </div>
 
     <script>
-        // --- CONFIGURATION FIREBASE (VOS CLÉS) ---
+        // --- CONFIGURATION FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyAwtygeAsSrauNNH38FN4D5nOIHdZ03kYM",
             authDomain: "crushmetal-game.firebaseapp.com",
@@ -211,22 +212,24 @@
             messagingSenderId: "131803629594",
             appId: "1:131803629594:web:53852cb82ca8f4d37269a3"
         };
-        const appId = "crushmetal-v1";
 
-        let db, currentUser;
-
-        // Initialisation (Mode Compat pour compatibilité fichier local)
-        try {
-            firebase.initializeApp(firebaseConfig);
-            const auth = firebase.auth();
-            db = firebase.firestore();
-            auth.signInAnonymously().then((u) => {
-                currentUser = u.user;
-                console.log("Connecté QG");
-            }).catch(e => console.warn(e));
-        } catch (e) { console.log("Mode hors-ligne", e); }
-
+        // Initialisation Robuste (Supporte le hors-ligne)
+        let db = null, currentUser = null;
+        
         document.addEventListener('DOMContentLoaded', () => {
+            // Tentative de connexion Firebase uniquement une fois le DOM prêt
+            if (typeof firebase !== 'undefined') {
+                try {
+                    firebase.initializeApp(firebaseConfig);
+                    const auth = firebase.auth();
+                    db = firebase.firestore();
+                    auth.signInAnonymously().then((u) => {
+                        currentUser = u.user;
+                        console.log("QG: Connecté");
+                    }).catch(e => console.log("QG: Mode hors-ligne (Auth échouée)"));
+                } catch(e) { console.log("QG: Mode hors-ligne (Init échouée)"); }
+            }
+
             // PLATFORM
             const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
             const CONFIG = { maxMines: isMobile ? 20 : 40, storagePrefix: isMobile ? 'crushmetal_hs_mobile_' : 'crushmetal_hs_pc_' };
@@ -251,20 +254,19 @@
                     await db.collection('scores').add({
                         score, difficulty, pilot: sailorName, userId: currentUser.uid, date: new Date().toISOString(), platform: isMobile ? 'MOBILE' : 'PC'
                     });
-                    if(ind) ind.textContent = "Sauvegardé !";
-                } catch(e) { if(ind) ind.textContent = "Erreur."; }
+                    if(ind) ind.textContent = "Score enregistré !";
+                } catch(e) { if(ind) ind.textContent = "Erreur transmission."; }
             }
 
-            async function fetchGlobalLeaderboard(diff) {
-                if(!db) return;
+            window.fetchGlobalLeaderboard = async function(difficulty) {
+                if (!db) return;
                 const list = document.getElementById('globalScoreList');
                 const loader = document.getElementById('loadingScores');
                 list.innerHTML = ''; loader.classList.remove('hidden');
                 try {
-                    // Note: Firestore queries require index for sorting + filtering. We do client-side filter for simplicity in this prototype.
                     const snap = await db.collection('scores').get();
                     let scores = [];
-                    snap.forEach(doc => { const d = doc.data(); if(d.difficulty === diff) scores.push(d); });
+                    snap.forEach(doc => { const d = doc.data(); if(d.difficulty === difficulty) scores.push(d); });
                     scores.sort((a, b) => b.score - a.score);
                     scores = scores.slice(0, 50);
                     loader.classList.add('hidden');
@@ -275,7 +277,7 @@
                         tr.innerHTML = `<td class="px-2 py-2 ${col}">${i+1}</td><td class="px-2 py-2 text-white truncate max-w-[100px]">${s.pilot}</td><td class="px-2 py-2 text-right font-mono text-emerald-400">${s.score}</td>`;
                         list.appendChild(tr);
                     });
-                } catch(e) { loader.textContent = "Erreur QG."; }
+                } catch(e) { loader.textContent = "Erreur QG (Connexion)."; }
             }
 
             // GAME VARS
@@ -289,7 +291,14 @@
             function updateBadges(){ document.querySelectorAll('.record-badge').forEach(b=>b.textContent=`Record: ${highScores[b.dataset.mode]}`); }
             updateBadges();
 
-            // RESIZE
+            function saveGameHistory(score, mode) {
+                let history = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
+                const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+                history.unshift({ score, mode, date, pilot: sailorName });
+                if(history.length > 10) history.pop();
+                localStorage.setItem('crushmetal_history', JSON.stringify(history));
+            }
+
             function resize(){
                 const c = document.getElementById('game-container');
                 if(c.clientWidth > 0) {
@@ -302,7 +311,6 @@
             }
             window.addEventListener('resize', resize);
 
-            // DRAW
             function drawElephantLogo(ctx,cx,cy){
                 ctx.save(); ctx.translate(cx,cy);
                 const isIcon = ctx.canvas.width === 512;
@@ -343,23 +351,17 @@
             document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             const happyBass = ['C2', 'E2', 'G2', 'A2', 'C2', 'E2', 'G2', 'B2'];
-            
-            function initAudio(){if(!audioCtx){try{audioCtx=new AudioContext();}catch(e){}}if(audioCtx?.state==='suspended')audioCtx.resume();}
             function getFreq(n,o){const N=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],k=N.indexOf({0:'C',3:'D#',5:'F',7:'G',10:'A#'}[n]||'C');return 440*Math.pow(2,((o-4)*12+(k-9))/12);}
             function playTone(f,t,d,tm,v=0.1){if(!soundEnabled||!audioCtx||f<=0)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),p=audioCtx.createStereoPanner();o.type=t;o.frequency.value=f;o.connect(g);g.connect(p);p.connect(audioCtx.destination);g.gain.setValueAtTime(v,tm);g.gain.exponentialRampToValueAtTime(0.001,tm+d);o.start(tm);o.stop(tm+d);}catch(e){}}
             function playExplosion(){if(!soundEnabled||!audioCtx)return;try{const t=audioCtx.currentTime,b=audioCtx.createBuffer(1,audioCtx.sampleRate*0.5,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=audioCtx.createBufferSource();n.buffer=b;const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=800;const g=audioCtx.createGain();g.gain.setValueAtTime(0.8,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.4);n.connect(f);f.connect(g);g.connect(audioCtx.destination);n.start(t);}catch(e){}}
             function scheduler(){if(!soundEnabled)return;while(nextNoteTime<audioCtx.currentTime+0.1){const b=noteIndex%16;if(b%4===0)playTone(150,'triangle',0.1,nextNoteTime,0.5);if(b%2!==0)playTone(8000,'triangle',0.05,nextNoteTime,0.05);playTone(getFreq(happyBass[noteIndex%8],2),'sawtooth',0.15,nextNoteTime,0.15);nextNoteTime+=(60/currentTempo/4);noteIndex++;}timerID=window.setTimeout(scheduler,25);}
-            
-            document.getElementById('audioBtn').addEventListener('click', () => {
-                initAudio(); soundEnabled = !soundEnabled; localStorage.setItem('crushmetal_sound', soundEnabled);
-                document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
-                if(soundEnabled && audioCtx) { nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); } else clearTimeout(timerID);
-            });
+            function initAudio(){if(!audioCtx){try{audioCtx=new AudioContext();}catch(e){}}if(audioCtx?.state==='suspended')audioCtx.resume();}
+            document.getElementById('audioBtn').addEventListener('click',()=>{initAudio();soundEnabled=!soundEnabled;localStorage.setItem('crushmetal_sound',soundEnabled);document.getElementById('audioStrike').style.display=soundEnabled?'none':'flex';if(soundEnabled&&audioCtx){nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();}else clearTimeout(timerID);});
 
             // GAME LOOP
             function startGame(diff){
                 initAudio(); currentTempo=128; totalMines=0;
-                if(soundEnabled){ clearTimeout(timerID); nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); }
+                if(soundEnabled && audioCtx){ clearTimeout(timerID); nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); }
                 currentDifficulty=diff; score=0; gameTime=0; foodTimer=0; enemyTimer=0; player.speed=DIFFICULTIES[diff].playerSpeed;
                 document.getElementById('scoreDisplay').textContent='0'; document.getElementById('mineDisplay').innerHTML='1<span class="text-sm text-slate-500">/'+CONFIG.maxMines+'</span>'; document.getElementById('highScoreDisplay').textContent=highScores[diff];
                 isGameOver=false;
@@ -374,7 +376,7 @@
                 isGameOver=true; document.body.classList.add('shake-screen'); setTimeout(()=>document.body.classList.remove('shake-screen'),500); playExplosion();
                 document.getElementById('hud').style.opacity='0'; clearTimeout(timerID);
                 let isNew=false; if(score>highScores[currentDifficulty]){ highScores[currentDifficulty]=score; localStorage.setItem(CONFIG.storagePrefix+currentDifficulty,score); updateBadges(); isNew=true; }
-                saveGameHistory(score, currentDifficulty); saveScoreOnline(score, currentDifficulty, sailorName);
+                saveGameHistory(score, currentDifficulty); saveScoreOnline(score, currentDifficulty);
                 document.getElementById('finalScore').textContent=score; document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];
                 document.getElementById('newRecordBadge').classList.toggle('hidden',!isNew); document.getElementById('noRecordBadge').classList.toggle('hidden',isNew);
                 setTimeout(() => { document.getElementById('gameOverScreen').classList.remove('hidden'); }, 1500);
@@ -385,8 +387,7 @@
                 if(isGameOver)return;
                 gameTime+=dt;document.getElementById('timeDisplay').textContent=Math.floor(gameTime)+'s';
                 if(foods.length===0)spawnFood(); foodTimer+=dt; if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}
-                enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;}
-                
+                enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;if(enemies.length<CONFIG.maxMines){document.getElementById('ui-layer').style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>document.getElementById('ui-layer').style.boxShadow="none",200);}}
                 let mx=0,my=0; if(keys.ArrowUp||keys.z||keys.w)my=-1;if(keys.ArrowDown||keys.s)my=1;if(keys.ArrowLeft||keys.q||keys.a)mx=-1;if(keys.ArrowRight||keys.d)mx=1;
                 if(touchInput.active){const dx=touchInput.x-touchInput.originX,dy=touchInput.y-touchInput.originY;if(Math.hypot(dx,dy)>10){mx=dx;my=dy;}}
                 if(mx||my){if(!touchInput.active){const l=Math.hypot(mx,my);if(l>0){mx/=l;my/=l;}}player.x+=mx*player.speed*dt;player.y+=my*player.speed*dt;if(mx<-0.1)player.angle=Math.PI;else if(mx>0.1)player.angle=0;}
@@ -397,29 +398,30 @@
             }
             function createParticles(x,y,c,n=8){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:c});}
             function spawnFood(){if(foods.length>=5)return;let x,y,ok=false,t=0;while(!ok&&t<10){x=50+Math.random()*(W-100);y=50+Math.random()*(H-100);ok=true;for(let f of foods)if(Math.hypot(x-f.x,y-f.y)<100)ok=false;t++;}foods.push({x,y,radius:8,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,color:'#fbbf24'});}
-            function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMines++;if(totalMines%10===0)currentTempo+=10;let x,y,t=0;do{x=20+Math.random()*(W-40);y=20+Math.random()*(H-40);t++;}while(Math.hypot(x-player.x,y-player.y)<200&&t<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;if(enemies.length<CONFIG.maxMines){const l=document.getElementById('ui-layer');l.style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>l.style.boxShadow="none",200);}}
+            function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMinesSpawned++;if(totalMinesSpawned%10===0)currentTempo+=10;let x,y,t=0;do{x=20+Math.random()*(W-40);y=20+Math.random()*(H-40);t++;}while(Math.hypot(x-player.x,y-player.y)<200&&t<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;if(enemies.length<CONFIG.maxMines){const l=document.getElementById('ui-layer');l.style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>l.style.boxShadow="none",200);}}
             
             function gameLoop(t){const dt=(t-lastTime)/1000;lastTime=t;update(Math.min(dt,0.1));draw();if(!isGameOver||particles.length>0)animationId=requestAnimationFrame(gameLoop);}
 
-            // INPUTS
-            window.addEventListener('keydown',e=>{if(keys[e.key]!==undefined)keys[e.key]=true;});window.addEventListener('keyup',e=>{if(keys[e.key]!==undefined)keys[e.key]=false;});
+            window.addEventListener('keydown',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=true;});window.addEventListener('keyup',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=false;});
             document.body.addEventListener('touchstart',e=>{if(e.target.closest('button'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
-            
-            // UI BINDINGS
-            document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));
-            document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
+            document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
             document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
             
-            // Scores UI
             const scoresScreen = document.getElementById('scoresScreen');
+            const tabLocal = document.getElementById('tabLocal');
+            const tabGlobal = document.getElementById('tabGlobal');
+            const viewLocal = document.getElementById('viewLocal');
+            const viewGlobal = document.getElementById('viewGlobal');
+
+            function resetTabs() { tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); }
+
             document.getElementById('btnScores').addEventListener('click', () => {
                 ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
                 const h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
                 const l = document.getElementById('historyList'); l.innerHTML = h.length?h.map(i=>`<li class="flex justify-between border-b border-slate-700 pb-1"><span>${i.date} <span class="font-bold ml-1">${i.mode.substring(0,1).toUpperCase()}</span></span> <span class="font-mono text-white">${i.score}</span></li>`).join(''):'<li class="text-center text-slate-500 italic">Aucune donnée</li>';
-                document.getElementById('tabLocal').click();
-                document.getElementById('menuScreen').style.display = 'none'; scoresScreen.classList.remove('hidden');
+                resetTabs(); document.getElementById('menuScreen').style.display = 'none'; scoresScreen.classList.remove('hidden');
             });
             document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; drawMenuBackground(); });
             
