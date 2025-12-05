@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -11,22 +11,24 @@
     <link id="favicon" rel="icon" type="image/png" href="">
     <link id="appleicon" rel="apple-touch-icon" href="">
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase Compat Scripts (Universel) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <!-- Firebase Compat Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap');
+
+        /* Optimisation Globale */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             margin: 0;
             overflow: hidden;
             background-color: #000;
-            touch-action: none;
+            touch-action: none; /* Bloque tout scroll natif */
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
@@ -40,6 +42,9 @@
             position: relative;
             overflow: hidden;
             background-color: #0f172a;
+            /* Force l'accélération GPU */
+            transform: translateZ(0);
+            will-change: transform;
         }
 
         body.pc-mode #game-container { height: 100vh; }
@@ -66,15 +71,13 @@
         body.pc-mode #thumb-zone { display: none; }
 
         .btn-menu {
-            transition: all 0.1s;
+            transition: transform 0.1s, background-color 0.1s;
             transform: skew(-10deg);
             cursor: pointer;
             position: relative;
             overflow: hidden;
             pointer-events: auto; 
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            z-index: 50;
         }
         .btn-menu:active { transform: skew(-10deg) scale(0.95); }
 
@@ -93,9 +96,26 @@
         
         .ui-layer-base { pointer-events: none; }
         .ui-interactive { pointer-events: auto; }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.9); 
+            display: flex; justify-content: center; items-center; z-index: 200;
+            backdrop-filter: blur(5px);
+        }
     </style>
 </head>
 <body>
+
+    <!-- MODAL NOM DU PILOTE (Au démarrage) -->
+    <div id="nameModal" class="modal-overlay hidden">
+        <div class="bg-slate-800 border border-slate-600 p-6 rounded-lg max-w-sm w-full mx-4 text-center shadow-2xl">
+            <h2 class="text-2xl font-black text-white mb-2 font-mono">IDENTIFICATION</h2>
+            <p class="text-slate-400 text-xs mb-4">Entrez votre indicatif Sailor pour le QG.</p>
+            <input type="text" id="nameInput" maxlength="10" placeholder="VOTRE PSEUDO" class="w-full bg-slate-900 text-white font-bold text-center py-3 rounded border border-slate-600 mb-4 focus:outline-none focus:border-emerald-500 uppercase">
+            <button id="saveNameBtn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded uppercase">VALIDER</button>
+        </div>
+    </div>
 
     <div id="game-container">
         <div id="platformIndicator" class="absolute bottom-2 right-2 z-10 text-[10px] text-white/20 pointer-events-none uppercase tracking-widest">Chargement...</div>
@@ -153,10 +173,20 @@
         <div id="scoresScreen" class="absolute inset-0 flex flex-col items-center justify-center z-30 bg-slate-900/95 backdrop-blur hidden ui-interactive">
             <div class="w-full max-w-md h-full flex flex-col px-6 py-8" style="padding-top: max(4rem, env(safe-area-inset-top));">
                 <h2 class="text-3xl font-black text-white mb-4 tracking-tighter uppercase text-center shrink-0" style="font-family: 'Black Ops One', cursive;">QG / ARCHIVES</h2>
-                <div class="flex gap-2 mb-4 shrink-0">
+                
+                <!-- Platform Toggles -->
+                <div class="flex justify-center gap-2 mb-4 shrink-0">
+                     <span class="text-slate-400 text-xs uppercase self-center mr-2">Filtre:</span>
+                     <button id="filterPlatAll" class="px-3 py-1 bg-slate-700 text-white text-xs rounded hover:bg-slate-600">TOUS</button>
+                     <button id="filterPlatMobile" class="px-3 py-1 bg-slate-800 text-slate-400 text-xs rounded hover:bg-slate-700 border border-slate-700">MOBILE</button>
+                     <button id="filterPlatPC" class="px-3 py-1 bg-slate-800 text-slate-400 text-xs rounded hover:bg-slate-700 border border-slate-700">PC</button>
+                </div>
+
+                <div class="flex gap-2 mb-2 shrink-0">
                     <button id="tabLocal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active">Mes Scores</button>
                     <button id="tabGlobal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive">Mondial</button>
                 </div>
+                
                 <div class="bg-slate-800 rounded-lg border border-slate-700 flex-grow overflow-hidden flex flex-col relative">
                     
                     <!-- Local -->
@@ -175,18 +205,11 @@
                     <div id="viewGlobal" class="hidden p-4 overflow-y-auto h-full flex flex-col">
                         <div class="flex justify-between items-center mb-4 gap-2">
                             <h3 class="text-blue-400 text-xs uppercase tracking-widest">Top 50</h3>
-                            <div class="flex gap-1">
-                                <select id="leaderboardFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600">
-                                    <option value="normal">Normal</option>
-                                    <option value="hardcore">Hardcore</option>
-                                    <option value="easy">Facile</option>
-                                </select>
-                                <select id="platformFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600">
-                                    <option value="ALL">Tous</option>
-                                    <option value="MOBILE">Mobile</option>
-                                    <option value="PC">PC</option>
-                                </select>
-                            </div>
+                            <select id="leaderboardFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600">
+                                <option value="normal">Normal</option>
+                                <option value="hardcore">Hardcore</option>
+                                <option value="easy">Facile</option>
+                            </select>
                         </div>
                         <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden">Connexion Satellite...</div>
                         <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2">Plat.</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-300 divide-y divide-slate-700/50"></tbody></table>
@@ -225,7 +248,7 @@
         let db = null, currentUser = null;
 
         document.addEventListener('DOMContentLoaded', () => {
-            // --- INITIALIZATION ---
+            // INIT FIREBASE
             if (typeof firebase !== 'undefined') {
                 try {
                     firebase.initializeApp(firebaseConfig);
@@ -233,7 +256,6 @@
                     db = firebase.firestore();
                     auth.signInAnonymously().then((u) => {
                         currentUser = u.user;
-                        console.log("QG: Connecté");
                     }).catch(e => console.log("Mode Offline"));
                 } catch(e) { console.log("Mode Offline"); }
             }
@@ -242,6 +264,7 @@
             let canvas = document.getElementById('gameCanvas');
             let ctx = canvas.getContext('2d', { alpha: false });
             let W = window.innerWidth, H = window.innerHeight, dpr = window.devicePixelRatio || 1;
+            let currentPlatformFilter = 'ALL';
             
             const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
             const CONFIG = { maxMines: isMobile ? 20 : 40, storagePrefix: isMobile ? 'crushmetal_hs_mobile_' : 'crushmetal_hs_pc_' };
@@ -250,24 +273,42 @@
             else { document.getElementById('platformIndicator').textContent = "MODE MOBILE"; document.getElementById('recordTypeLabel').textContent = "MOBILE"; }
             document.getElementById('maxMinesDisplay').textContent = '/' + CONFIG.maxMines;
 
-            let sailorName = localStorage.getItem('crushmetal_sailor_name') || 'SAILOR';
-            document.getElementById('pilotNameDisplay').textContent = sailorName;
+            // --- PILOT & MODAL LOGIC ---
+            let sailorName = localStorage.getItem('crushmetal_sailor_name');
             
-            const updatePilotName = () => {
-                setTimeout(() => {
-                    const newName = prompt("Nom de Sailor (Max 10 chars):", sailorName);
-                    if(newName && newName.length <= 10 && newName.trim() !== "") {
-                        sailorName = newName.toUpperCase().trim();
-                        localStorage.setItem('crushmetal_sailor_name', sailorName);
-                        document.getElementById('pilotNameDisplay').textContent = sailorName;
-                        alert("Nom de Sailor mis à jour : " + sailorName);
-                    }
-                }, 50);
+            function showNameModal() {
+                document.getElementById('nameModal').classList.remove('hidden');
+                document.getElementById('nameModal').style.display = 'flex';
+            }
+            
+            function hideNameModal() {
+                document.getElementById('nameModal').classList.add('hidden');
+                document.getElementById('nameModal').style.display = 'none';
+            }
+
+            // Initial check
+            if (!sailorName || sailorName === 'SAILOR') {
+                showNameModal();
+            } else {
+                document.getElementById('pilotNameDisplay').textContent = sailorName;
+            }
+
+            const validateName = () => {
+                const input = document.getElementById('nameInput');
+                let name = input.value.trim();
+                if(name.length > 0) {
+                    name = name.toUpperCase().substring(0, 10);
+                    localStorage.setItem('crushmetal_sailor_name', name);
+                    sailorName = name;
+                    document.getElementById('pilotNameDisplay').textContent = sailorName;
+                    hideNameModal();
+                }
             };
-            
-            const pBtn = document.getElementById('profileBtn');
-            pBtn.addEventListener('click', updatePilotName);
-            pBtn.addEventListener('touchend', (e) => { e.preventDefault(); updatePilotName(); });
+
+            document.getElementById('saveNameBtn').addEventListener('click', validateName);
+            // Re-open on profile click
+            document.getElementById('profileBtn').addEventListener('click', showNameModal);
+
 
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             let audioCtx, nextNoteTime=0, noteIndex=0, baseTempo=128, currentTempo=128, timerID;
@@ -483,7 +524,7 @@
                 if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = false;
             });
 
-            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter') || e.target.closest('#platformFilter') || e.target.closest('#nameModal'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
             
@@ -504,6 +545,29 @@
             const viewGlobal = document.getElementById('viewGlobal');
             const leaderboardFilter = document.getElementById('leaderboardFilter');
             const platformFilter = document.getElementById('platformFilter');
+            
+            // TOGGLE PLATFORM BUTTONS
+            const btnAll = document.getElementById('filterPlatAll');
+            const btnMob = document.getElementById('filterPlatMobile');
+            const btnPc = document.getElementById('filterPlatPC');
+
+            function setPlatformFilter(p) {
+                currentPlatformFilter = p;
+                // Update visuals
+                [btnAll, btnMob, btnPc].forEach(b => {
+                    b.classList.remove('bg-slate-700', 'text-white');
+                    b.classList.add('bg-slate-800', 'text-slate-400');
+                });
+                const active = p === 'ALL' ? btnAll : (p === 'MOBILE' ? btnMob : btnPc);
+                active.classList.remove('bg-slate-800', 'text-slate-400');
+                active.classList.add('bg-slate-700', 'text-white');
+                
+                if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, currentPlatformFilter);
+            }
+
+            btnAll.addEventListener('click', () => setPlatformFilter('ALL'));
+            btnMob.addEventListener('click', () => setPlatformFilter('MOBILE'));
+            btnPc.addEventListener('click', () => setPlatformFilter('PC'));
 
             document.getElementById('btnScores').addEventListener('click', () => {
                 ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
@@ -526,10 +590,10 @@
                 tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; 
                 tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; 
                 viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); 
-                if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, platformFilter.value); 
+                if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, currentPlatformFilter); 
             });
             
-            window.fetchGlobalLeaderboard = async function(difficulty, platform = 'ALL') {
+            window.fetchGlobalLeaderboard = async function(difficulty, platform) {
                 if (!db) return;
                 const list = document.getElementById('globalScoreList');
                 const loader = document.getElementById('loadingScores');
@@ -563,8 +627,7 @@
                 } catch (e) { loader.textContent = "Erreur connexion QG."; }
             };
 
-            leaderboardFilter.addEventListener('change', () => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, platformFilter.value); });
-            platformFilter.addEventListener('change', () => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, platformFilter.value); });
+            leaderboardFilter.addEventListener('change', () => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, currentPlatformFilter); });
 
             function genIcon(){const c=document.createElement('canvas');c.width=512;c.height=512;const x=c.getContext('2d');x.fillStyle='#0f172a';x.fillRect(0,0,512,512);drawElephantLogo(x,256,256);const u=c.toDataURL('image/png');document.getElementById('favicon').href=u;document.getElementById('appleicon').href=u;}
             
@@ -576,4 +639,3 @@
     </script>
 </body>
 </html>
-```eof
