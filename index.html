@@ -1,4 +1,4 @@
-
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -213,6 +213,7 @@
                     db = firebase.firestore();
                     auth.signInAnonymously().then((u) => {
                         currentUser = u.user;
+                        console.log("QG: Connecté");
                     }).catch(e => console.log("Mode Offline"));
                 } catch(e) { console.log("Mode Offline"); }
             }
@@ -450,7 +451,17 @@
             document.getElementById('leaderboardFilter').addEventListener('change', (e) => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(e.target.value); });
 
             // Input Handlers
-            window.addEventListener('keydown',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=true;});window.addEventListener('keyup',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=false;});
+            window.addEventListener('keydown',e=>{
+                const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+                if(keys.hasOwnProperty(key)) {
+                    keys[key]=true;
+                    if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) e.preventDefault();
+                }
+            });
+            window.addEventListener('keyup',e=>{
+                const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+                if(keys.hasOwnProperty(key)) keys[key]=false;
+            });
             document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
@@ -466,3 +477,4 @@
     </script>
 </body>
 </html>
+```
