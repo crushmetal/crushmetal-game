@@ -14,7 +14,7 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase Compat Scripts -->
+    <!-- Firebase Compat Scripts (Chargement Classique) -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
@@ -30,7 +30,6 @@
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
-            height: 100vh; /* Fallback */
             height: 100dvh; 
             display: flex;
             flex-direction: column;
@@ -41,9 +40,9 @@
             position: relative;
             overflow: hidden;
             background-color: #0f172a;
-            width: 100%;
-            height: 100%;
         }
+
+        body.pc-mode #game-container { height: 100vh; }
 
         canvas { display: block; width: 100%; height: 100%; }
 
@@ -159,6 +158,8 @@
                     <button id="tabGlobal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive">Mondial</button>
                 </div>
                 <div class="bg-slate-800 rounded-lg border border-slate-700 flex-grow overflow-hidden flex flex-col relative">
+                    
+                    <!-- Local -->
                     <div id="viewLocal" class="p-4 overflow-y-auto h-full">
                         <h3 class="text-emerald-400 text-xs uppercase tracking-widest mb-4 border-b border-slate-700 pb-1">Statistiques Sailor</h3>
                         <div class="grid grid-cols-3 gap-2 text-center mb-6">
@@ -169,11 +170,28 @@
                         <h3 class="text-slate-400 text-xs uppercase tracking-widest mb-2 border-b border-slate-700 pb-1">Journal de Bord</h3>
                         <ul id="historyList" class="text-sm text-slate-300 space-y-2"></ul>
                     </div>
+
+                    <!-- Global -->
                     <div id="viewGlobal" class="hidden p-4 overflow-y-auto h-full flex flex-col">
-                        <div class="flex justify-between items-center mb-4"><h3 class="text-blue-400 text-xs uppercase tracking-widest">Top 50 Mondial</h3><select id="leaderboardFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600"><option value="normal">Normal</option><option value="hardcore">Hardcore</option><option value="easy">Facile</option></select></div>
-                        <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden">Chargement...</div>
-                        <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-300 divide-y divide-slate-700/50"></tbody></table>
+                        <div class="flex justify-between items-center mb-4 gap-2">
+                            <h3 class="text-blue-400 text-xs uppercase tracking-widest">Top 50</h3>
+                            <div class="flex gap-1">
+                                <select id="leaderboardFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600">
+                                    <option value="normal">Normal</option>
+                                    <option value="hardcore">Hardcore</option>
+                                    <option value="easy">Facile</option>
+                                </select>
+                                <select id="platformFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600">
+                                    <option value="ALL">Tous</option>
+                                    <option value="MOBILE">Mobile</option>
+                                    <option value="PC">PC</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden">Connexion Satellite...</div>
+                        <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2">Plat.</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-300 divide-y divide-slate-700/50"></tbody></table>
                     </div>
+
                 </div>
                 <button id="btnCloseScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold uppercase rounded mt-4 shrink-0">FERMER</button>
             </div>
@@ -215,7 +233,7 @@
                     db = firebase.firestore();
                     auth.signInAnonymously().then((u) => {
                         currentUser = u.user;
-                        console.log("QG: Connecté");
+                        console.log("QG: Connecté", currentUser.uid);
                     }).catch(e => console.log("Mode Offline"));
                 } catch(e) { console.log("Mode Offline"); }
             }
@@ -256,21 +274,14 @@
 
             // --- FUNCTIONS ---
             function getFreq(n,o){const N=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],k=N.indexOf({0:'C',3:'D#',5:'F',7:'G',10:'A#'}[n]||'C');return 440*Math.pow(2,((o-4)*12+(k-9))/12);}
-            
             function playTone(f,t,d,tm,v=0.1){if(!soundEnabled||!audioCtx)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),p=audioCtx.createStereoPanner();o.type=t;o.frequency.value=f;o.connect(g);g.connect(p);p.connect(audioCtx.destination);g.gain.setValueAtTime(v,tm);g.gain.exponentialRampToValueAtTime(0.001,tm+d);o.start(tm);o.stop(tm+d);}catch(e){}}
-            
             function playExplosion(){if(!soundEnabled||!audioCtx)return;try{const t=audioCtx.currentTime,n=audioCtx.createBufferSource(),b=audioCtx.createBuffer(1,audioCtx.sampleRate*0.5,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;n.buffer=b;const g=audioCtx.createGain();g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.5);n.connect(g);g.connect(audioCtx.destination);n.start(t);}catch(e){}}
-            
             function scheduler(){if(!soundEnabled)return;while(nextNoteTime<audioCtx.currentTime+0.1){const b=noteIndex%16;if(b%4===0)playTone(150,'triangle',0.1,nextNoteTime,0.5);if(b%2!==0)playTone(8000,'triangle',0.05,nextNoteTime,0.05);playTone(getFreq(happyBass[noteIndex%8],2),'sawtooth',0.15,nextNoteTime,0.1);nextNoteTime+=(60/currentTempo/4);noteIndex++;}timerID=window.setTimeout(scheduler,25);}
-            
             function initAudioContext(){if(!audioCtx){try{audioCtx=new AudioContext();}catch(e){}}if(audioCtx?.state==='suspended')audioCtx.resume();}
+            document.getElementById('audioBtn').addEventListener('click',()=>{initAudioContext();soundEnabled=!soundEnabled;localStorage.setItem('crushmetal_sound',soundEnabled);document.getElementById('audioStrike').style.display=soundEnabled?'none':'flex';if(soundEnabled&&audioCtx){nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();}else clearTimeout(timerID);});
 
             function updateMenuHighScores() {
-                highScores = { 
-                    easy: localStorage.getItem(CONFIG.storagePrefix+'easy')||0, 
-                    normal: localStorage.getItem(CONFIG.storagePrefix+'normal')||0, 
-                    hardcore: localStorage.getItem(CONFIG.storagePrefix+'hardcore')||0 
-                };
+                highScores = { easy: localStorage.getItem(CONFIG.storagePrefix+'easy')||0, normal: localStorage.getItem(CONFIG.storagePrefix+'normal')||0, hardcore: localStorage.getItem(CONFIG.storagePrefix+'hardcore')||0 };
                 document.querySelectorAll('.record-badge').forEach(b=>b.textContent=`Record: ${highScores[b.dataset.mode]}`);
             }
 
@@ -329,7 +340,7 @@
             function createParticles(x,y,c,n=8){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:c});}
 
             function startGame(diff){
-                resize(); // Force resize on start
+                resize(); 
                 initAudioContext(); currentTempo=128;
                 if(soundEnabled && audioCtx){ clearTimeout(timerID); nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); }
                 currentDifficulty=diff; score=0; gameTime=0; foodTimer=0; enemyTimer=0; player.speed=DIFFICULTIES[diff].playerSpeed;
@@ -350,7 +361,6 @@
             }
 
             async function saveScoreAndShow(score, diff) {
-                // Try sending online
                 if(db && currentUser) {
                     const ind = document.getElementById('savingIndicator');
                     ind.classList.remove('hidden'); ind.textContent = "Envoi...";
@@ -375,16 +385,9 @@
                     isNew=true; 
                 }
                 
-                // Save local history
-                let h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
-                h.unshift({ score, mode:currentDifficulty, date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}), pilot:sailorName });
-                if(h.length>10) h.pop();
-                localStorage.setItem('crushmetal_history', JSON.stringify(h));
-
-                // Online save call
+                try { saveGameHistory(score, currentDifficulty); } catch(e){}
                 saveScoreAndShow(score, currentDifficulty);
 
-                // Show UI delayed
                 setTimeout(() => { 
                     document.getElementById('finalScore').textContent=score; 
                     document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];
@@ -402,7 +405,6 @@
                 if(foods.length===0)spawnFood(); foodTimer+=dt; if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}
                 enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;if(enemies.length<CONFIG.maxMines){document.getElementById('ui-layer').style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>document.getElementById('ui-layer').style.boxShadow="none",200);}}
                 
-                // INPUT LOGIC CORRECTION (KEYBOARD)
                 let mx=0,my=0; 
                 if(keys.up) my=-1;
                 if(keys.down) my=1;
@@ -413,8 +415,6 @@
                     const dx=touchInput.x-touchInput.originX;
                     const dy=touchInput.y-touchInput.originY;
                     const dist = Math.hypot(dx,dy);
-                    
-                    // Mobile speed fix: Normalize vector
                     if(dist > 10){ 
                         mx = dx / dist;
                         my = dy / dist;
@@ -422,7 +422,6 @@
                         mx = 0; my = 0;
                     }
                 } else {
-                    // Keyboard Normalization
                     const l=Math.hypot(mx,my);
                     if(l>0){mx/=l;my/=l;}
                 }
@@ -459,55 +458,106 @@
             });
 
             document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
-            document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
             
+            function returnToMenu() {
+                document.getElementById('gameOverScreen').classList.add('hidden');
+                document.getElementById('menuScreen').style.display='flex';
+                document.getElementById('menuScreen').style.opacity='1'; // FIX: Restore opacity
+                drawMenuBackground();
+            }
+            document.getElementById('btnReturnMenu').addEventListener('click', returnToMenu);
+
+            // SCORES UI
             const scoresScreen = document.getElementById('scoresScreen');
             const tabLocal = document.getElementById('tabLocal');
             const tabGlobal = document.getElementById('tabGlobal');
             const viewLocal = document.getElementById('viewLocal');
             const viewGlobal = document.getElementById('viewGlobal');
-
-            function resetTabs() {
-                tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
-                tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
-                viewLocal.classList.remove('hidden');
-                viewGlobal.classList.add('hidden');
-            }
+            const leaderboardFilter = document.getElementById('leaderboardFilter');
+            const platformFilter = document.getElementById('platformFilter');
 
             document.getElementById('btnScores').addEventListener('click', () => {
                 ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
                 const h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
                 const l = document.getElementById('historyList'); l.innerHTML = h.length?h.map(i=>`<li class="flex justify-between border-b border-slate-700 pb-1"><span>${i.date} <span class="font-bold ml-1">${i.mode.substring(0,1).toUpperCase()}</span></span> <span class="font-mono text-white">${i.score}</span></li>`).join(''):'<li class="text-center text-slate-500 italic">Aucune donnée</li>';
-                resetTabs(); 
+                
+                // Reset tabs
+                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
+                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
+                viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden');
+                
                 document.getElementById('menuScreen').style.display = 'none'; 
                 scoresScreen.classList.remove('hidden');
             });
 
-            document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; drawMenuBackground(); });
+            document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; document.getElementById('menuScreen').style.opacity='1'; drawMenuBackground(); });
+            
             tabLocal.addEventListener('click', () => { tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); });
-            tabGlobal.addEventListener('click', () => { tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard('normal'); });
-            document.getElementById('leaderboardFilter').addEventListener('change', (e) => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(e.target.value); });
+            tabGlobal.addEventListener('click', () => { 
+                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; 
+                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; 
+                viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); 
+                if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, platformFilter.value); 
+            });
+            
+            // UPDATE LEADERBOARD FUNCTION TO SUPPORT PLATFORM FILTER
+            window.fetchGlobalLeaderboard = async function(difficulty, platform = 'ALL') {
+                if (!db) return;
+                const list = document.getElementById('globalScoreList');
+                const loader = document.getElementById('loadingScores');
+                list.innerHTML = ''; loader.classList.remove('hidden');
+                try {
+                    const snapshot = await db.collection('scores').get();
+                    let scores = [];
+                    snapshot.forEach(doc => { 
+                        const data = doc.data(); 
+                        // Filter by Difficulty AND Platform
+                        if(data.difficulty === difficulty) {
+                            if (platform === 'ALL' || data.platform === platform) {
+                                scores.push(data);
+                            }
+                        }
+                    });
+                    scores.sort((a, b) => b.score - a.score);
+                    scores = scores.slice(0, 50); 
+                    loader.classList.add('hidden');
+                    if(scores.length === 0) {
+                        list.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-500">Aucune donnée</td></tr>';
+                        return;
+                    }
+                    scores.forEach((s, index) => {
+                        const tr = document.createElement('tr');
+                        tr.className = index < 3 ? "bg-slate-800/50 font-bold" : "";
+                        const rankColor = index === 0 ? "text-yellow-400" : (index === 1 ? "text-slate-300" : (index === 2 ? "text-amber-600" : "text-slate-500"));
+                        // Added platform column icon
+                        const platIcon = s.platform === 'MOBILE' ? '📱' : '💻';
+                        tr.innerHTML = `<td class="px-2 py-2 ${rankColor}">${index + 1}</td><td class="px-2 py-2 text-white truncate max-w-[100px]">${s.pilot || 'Inconnu'}</td><td class="px-2 py-2 text-center text-xs">${platIcon}</td><td class="px-2 py-2 text-right font-mono text-emerald-400">${s.score}</td>`;
+                        list.appendChild(tr);
+                    });
+                } catch (e) { loader.textContent = "Erreur connexion QG."; }
+            };
+
+            leaderboardFilter.addEventListener('change', () => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, platformFilter.value); });
+            platformFilter.addEventListener('change', () => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, platformFilter.value); });
 
             // MANUAL KEY HANDLERS
             window.addEventListener('keydown', e => {
                 const k = e.key;
-                // ZQSD / Arrows
-                if (k === 'ArrowUp' || k === 'z' || k === 'Z' || k === 'w' || k === 'W') keys.up = true;
-                if (k === 'ArrowDown' || k === 's' || k === 'S') keys.down = true;
-                if (k === 'ArrowLeft' || k === 'q' || k === 'Q' || k === 'a' || k === 'A') keys.left = true;
-                if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.right = true;
+                if (['ArrowUp', 'w', 'W', 'z', 'Z'].includes(k)) keys.up = true;
+                if (['ArrowDown', 's', 'S'].includes(k)) keys.down = true;
+                if (['ArrowLeft', 'a', 'A', 'q', 'Q'].includes(k)) keys.left = true;
+                if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = true;
             });
-
             window.addEventListener('keyup', e => {
                 const k = e.key;
-                if (k === 'ArrowUp' || k === 'z' || k === 'Z' || k === 'w' || k === 'W') keys.up = false;
-                if (k === 'ArrowDown' || k === 's' || k === 'S') keys.down = false;
-                if (k === 'ArrowLeft' || k === 'q' || k === 'Q' || k === 'a' || k === 'A') keys.left = false;
-                if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.right = false;
+                if (['ArrowUp', 'w', 'W', 'z', 'Z'].includes(k)) keys.up = false;
+                if (['ArrowDown', 's', 'S'].includes(k)) keys.down = false;
+                if (['ArrowLeft', 'a', 'A', 'q', 'Q'].includes(k)) keys.left = false;
+                if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = false;
             });
 
             // TOUCH HANDLERS
-            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('select'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
 
@@ -521,3 +571,4 @@
     </script>
 </body>
 </html>
+```eof
