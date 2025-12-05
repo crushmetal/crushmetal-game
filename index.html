@@ -11,7 +11,14 @@
     <link id="favicon" rel="icon" type="image/png" href="">
     <link id="appleicon" rel="apple-touch-icon" href="">
 
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase Compat Scripts (Fonctionne partout) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap');
 
@@ -23,7 +30,7 @@
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
-            height: 100dvh; /* Hauteur dynamique mobile */
+            height: 100dvh; 
             display: flex;
             flex-direction: column;
         }
@@ -35,14 +42,9 @@
             background-color: #0f172a;
         }
 
-        body.pc-mode #game-container {
-            height: 100vh;
-        }
+        body.pc-mode #game-container { height: 100vh; }
 
-        /* Le canvas ne gère plus sa taille CSS ici, c'est géré par le JS pour le ratio HD */
-        canvas {
-            display: block;
-        }
+        canvas { display: block; width: 100%; height: 100%; }
 
         #thumb-zone {
             height: 80px;
@@ -58,7 +60,7 @@
             z-index: 20;
             cursor: crosshair; 
             border-top: 1px solid #333;
-            padding-bottom: env(safe-area-inset-bottom); /* Protection iPhone X */
+            padding-bottom: env(safe-area-inset-bottom);
         }
 
         body.pc-mode #thumb-zone { display: none; }
@@ -71,23 +73,20 @@
             overflow: hidden;
             pointer-events: auto; 
             user-select: none;
+            /* Fix mobile tap highlight */
+            -webkit-tap-highlight-color: transparent;
         }
         .btn-menu:active { transform: skew(-10deg) scale(0.95); }
 
         .hud-text { text-shadow: 1px 1px 0 #000; }
         
-        /* Gestion des zones de sécurité (Encoche) */
-        #ui-layer {
-            padding-top: max(1rem, env(safe-area-inset-top));
-            padding-left: max(1rem, env(safe-area-inset-left));
-            padding-right: max(1rem, env(safe-area-inset-right));
-        }
-
-        @keyframes flash {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
+        @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .new-record { animation: flash 1s infinite; }
+
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        
         .shake-screen { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
         @keyframes shake {
             10%, 90% { transform: translate3d(-1px, 0, 0); }
@@ -95,210 +94,115 @@
             30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
             40%, 60% { transform: translate3d(4px, 0, 0); }
         }
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        /* Onglets */
+        .tab-active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .tab-inactive { background-color: #1e293b; color: #94a3b8; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
         
-        <div id="platformIndicator" class="absolute bottom-2 right-2 z-50 text-[10px] text-white/20 pointer-events-none uppercase tracking-widest">
-            Chargement...
-        </div>
+        <div id="platformIndicator" class="absolute bottom-2 right-2 z-50 text-[10px] text-white/20 pointer-events-none uppercase tracking-widest">Chargement...</div>
 
-        <!-- Top Right Controls -->
+        <!-- Controls Top Right -->
         <div class="absolute top-4 right-4 z-50 flex gap-2" style="top: max(1rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right));">
              <button id="profileBtn" class="pointer-events-auto bg-slate-800/80 hover:bg-slate-700 px-3 py-2 rounded-full border border-white/20 transition-colors shadow-lg flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                 <span id="pilotNameDisplay" class="text-xs text-white font-mono uppercase hidden sm:inline">SAILOR</span>
             </button>
-
             <button id="audioBtn" class="pointer-events-auto bg-slate-800/80 hover:bg-slate-700 p-2 rounded-full border border-white/20 transition-colors shadow-lg">
                 <div class="relative w-6 h-6">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                    </svg>
-                    <div id="audioStrike" class="absolute top-0 left-0 w-full h-full flex items-center justify-center" style="display: flex;">
-                        <div class="w-full h-0.5 bg-red-500 rotate-45 box-border border-y border-black"></div>
-                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    <div id="audioStrike" class="absolute top-0 left-0 w-full h-full flex items-center justify-center" style="display: flex;"><div class="w-full h-0.5 bg-red-500 rotate-45 box-border border-y border-black"></div></div>
                 </div>
             </button>
         </div>
 
-        <!-- UI Overlay -->
-        <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col z-10">
-            
-            <!-- HUD (In Game) -->
+        <!-- HUD -->
+        <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col z-10" style="padding-top: max(1rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));">
             <div id="hud" class="w-full h-full relative opacity-0 transition-opacity duration-500 pointer-events-none">
                 <div class="absolute top-0 left-0 text-left">
-                    <div>
-                        <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Score</p>
-                        <h1 id="scoreDisplay" class="text-3xl font-bold font-mono text-emerald-400 drop-shadow-lg leading-tight">0</h1>
-                    </div>
-                    <div class="mt-2">
-                        <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Mines</p>
-                        <h1 id="mineDisplay" class="text-2xl font-bold font-mono text-red-500 drop-shadow-lg leading-tight">0<span class="text-sm text-slate-500" id="maxMinesDisplay">/20</span></h1>
-                    </div>
+                    <div><p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Score</p><h1 id="scoreDisplay" class="text-3xl font-bold font-mono text-emerald-400 drop-shadow-lg leading-tight">0</h1></div>
+                    <div class="mt-2"><p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Mines</p><h1 id="mineDisplay" class="text-2xl font-bold font-mono text-red-500 drop-shadow-lg leading-tight">0<span class="text-sm text-slate-500" id="maxMinesDisplay">/20</span></h1></div>
                 </div>
                 <div class="absolute top-0 left-1/2 -translate-x-1/2 text-center">
                     <div class="bg-slate-800/80 px-4 py-1 rounded-b-lg border-b border-x border-slate-600 backdrop-blur-sm">
-                        <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none mb-1">Temps</p>
-                        <h1 id="timeDisplay" class="text-2xl font-bold font-mono text-slate-100">0s</h1>
+                        <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none mb-1">Temps</p><h1 id="timeDisplay" class="text-2xl font-bold font-mono text-slate-100">0s</h1>
                     </div>
                 </div>
                 <div class="absolute top-14 right-0 text-right">
-                    <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record (<span id="recordTypeLabel">...</span>)</p>
-                    <h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record (<span id="recordTypeLabel">...</span>)</p><h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
                 </div>
             </div>
 
-            <!-- GAME OVER SCREEN -->
+            <!-- GAME OVER -->
             <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto z-30 bg-black/80 backdrop-blur-sm hidden">
                 <div class="text-center w-full max-w-sm px-6">
                     <h2 class="text-4xl font-black text-red-500 mb-2 tracking-tighter uppercase" style="font-family: 'Black Ops One', cursive;">MISSION ÉCHOUÉE</h2>
-                    
                     <div class="bg-slate-800 border-2 border-slate-600 rounded-xl p-6 mb-6 shadow-2xl">
-                        <p class="text-slate-400 text-sm uppercase tracking-widest mb-1">Score Final</p>
-                        <h1 id="finalScore" class="text-6xl font-mono font-bold text-white mb-4">0</h1>
-                        
-                        <div id="newRecordBadge" class="hidden new-record bg-amber-500 text-black font-bold px-3 py-1 rounded inline-block text-sm uppercase tracking-wider mb-2">
-                            NOUVEAU RECORD !
-                        </div>
-                        <div id="noRecordBadge" class="text-slate-500 text-xs uppercase tracking-wide">
-                            Record actuel: <span id="currentRecordDisplay">0</span>
-                        </div>
+                        <p class="text-slate-400 text-sm uppercase tracking-widest mb-1">Score Final</p><h1 id="finalScore" class="text-6xl font-mono font-bold text-white mb-4">0</h1>
+                        <div id="newRecordBadge" class="hidden new-record bg-amber-500 text-black font-bold px-3 py-1 rounded inline-block text-sm uppercase tracking-wider mb-2">NOUVEAU RECORD !</div>
+                        <div id="noRecordBadge" class="text-slate-500 text-xs uppercase tracking-wide">Record actuel: <span id="currentRecordDisplay">0</span></div>
                         <div id="savingIndicator" class="text-blue-400 text-xs mt-2 hidden">Sauvegarde en ligne...</div>
                     </div>
-
                     <div class="flex flex-col gap-3 w-full">
-                        <button id="btnReplay" class="btn-menu w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50 uppercase">
-                            REJOUER
-                        </button>
-                        <button id="btnReturnMenu" class="btn-menu w-full py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 uppercase">
-                            RETOUR AU MENU
-                        </button>
+                        <button id="btnReplay" class="btn-menu w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50 uppercase">REJOUER</button>
+                        <button id="btnReturnMenu" class="btn-menu w-full py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 uppercase">RETOUR AU MENU</button>
                     </div>
                 </div>
             </div>
 
-            <!-- SCORES SCREEN -->
+            <!-- SCORES -->
             <div id="scoresScreen" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto z-30 bg-slate-900/95 backdrop-blur hidden">
-                <div class="w-full max-w-md h-full flex flex-col px-6 py-8" style="padding-top: max(2rem, env(safe-area-inset-top));">
+                <div class="w-full max-w-md h-full flex flex-col px-6 py-8" style="padding-top: max(4rem, env(safe-area-inset-top));">
                     <h2 class="text-3xl font-black text-white mb-4 tracking-tighter uppercase text-center shrink-0" style="font-family: 'Black Ops One', cursive;">QG / ARCHIVES</h2>
-                    
                     <div class="flex gap-2 mb-4 shrink-0">
                         <button id="tabLocal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active">Mes Scores</button>
                         <button id="tabGlobal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive">Mondial</button>
                     </div>
-
                     <div class="bg-slate-800 rounded-lg border border-slate-700 flex-grow overflow-hidden flex flex-col relative">
-                        <!-- Local View -->
                         <div id="viewLocal" class="p-4 overflow-y-auto custom-scroll h-full">
                             <h3 class="text-emerald-400 text-xs uppercase tracking-widest mb-4 border-b border-slate-700 pb-1">Statistiques Sailor</h3>
                             <div class="grid grid-cols-3 gap-2 text-center mb-6">
-                                <div class="bg-slate-900/50 p-2 rounded">
-                                    <p class="text-[10px] text-slate-500">FACILE</p>
-                                    <p id="scoreStatEasy" class="text-xl font-bold text-white">0</p>
-                                </div>
-                                <div class="bg-slate-900/50 p-2 rounded">
-                                    <p class="text-[10px] text-slate-500">NORMAL</p>
-                                    <p id="scoreStatNormal" class="text-xl font-bold text-white">0</p>
-                                </div>
-                                <div class="bg-slate-900/50 p-2 rounded">
-                                    <p class="text-[10px] text-slate-500">HARD</p>
-                                    <p id="scoreStatHardcore" class="text-xl font-bold text-white">0</p>
-                                </div>
+                                <div class="bg-slate-900/50 p-2 rounded"><p class="text-[10px] text-slate-500">FACILE</p><p id="scoreStatEasy" class="text-xl font-bold text-white">0</p></div>
+                                <div class="bg-slate-900/50 p-2 rounded"><p class="text-[10px] text-slate-500">NORMAL</p><p id="scoreStatNormal" class="text-xl font-bold text-white">0</p></div>
+                                <div class="bg-slate-900/50 p-2 rounded"><p class="text-[10px] text-slate-500">HARD</p><p id="scoreStatHardcore" class="text-xl font-bold text-white">0</p></div>
                             </div>
                             <h3 class="text-slate-400 text-xs uppercase tracking-widest mb-2 border-b border-slate-700 pb-1">Journal de Bord</h3>
                             <ul id="historyList" class="text-sm text-slate-300 space-y-2"></ul>
                         </div>
-
-                        <!-- Global View -->
                         <div id="viewGlobal" class="hidden p-4 overflow-y-auto custom-scroll h-full flex flex-col">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-blue-400 text-xs uppercase tracking-widest">Top 50 Mondial</h3>
-                                <select id="leaderboardFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600">
-                                    <option value="normal">Normal</option>
-                                    <option value="hardcore">Hardcore</option>
-                                    <option value="easy">Facile</option>
-                                </select>
-                            </div>
-                            
-                            <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden">
-                                <svg class="animate-spin h-5 w-5 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                Connexion Satellite...
-                            </div>
-
-                            <table class="w-full text-sm text-left">
-                                <thead class="text-xs text-slate-500 uppercase bg-slate-900">
-                                    <tr>
-                                        <th class="px-2 py-2">#</th>
-                                        <th class="px-2 py-2">Sailor</th>
-                                        <th class="px-2 py-2 text-right">Score</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="globalScoreList" class="text-slate-300 divide-y divide-slate-700/50"></tbody>
-                            </table>
+                            <div class="flex justify-between items-center mb-4"><h3 class="text-blue-400 text-xs uppercase tracking-widest">Top 50 Mondial</h3><select id="leaderboardFilter" class="bg-slate-900 text-white text-xs p-1 rounded border border-slate-600"><option value="normal">Normal</option><option value="hardcore">Hardcore</option><option value="easy">Facile</option></select></div>
+                            <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden"><svg class="animate-spin h-5 w-5 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Connexion Satellite...</div>
+                            <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-300 divide-y divide-slate-700/50"></tbody></table>
                         </div>
                     </div>
-
-                    <button id="btnCloseScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold uppercase rounded mt-4 shrink-0">
-                        FERMER
-                    </button>
+                    <button id="btnCloseScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold uppercase rounded mt-4 shrink-0">FERMER</button>
                 </div>
             </div>
 
             <!-- Menu Screen -->
             <div id="menuScreen" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto transition-opacity duration-300 z-20">
                 <div class="flex flex-col gap-3 w-full max-w-xs px-6" style="margin-top: 25vh;">
-                    <button id="btnEasy" class="btn-menu w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50">
-                        <div class="flex justify-between items-center px-2">
-                            <span>FACILE</span>
-                            <span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="easy">0</span>
-                        </div>
-                    </button>
-                    
-                    <button id="btnNormal" class="btn-menu w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xl border-l-4 border-blue-400 shadow-lg shadow-blue-900/50">
-                        <div class="flex justify-between items-center px-2">
-                            <span>NORMAL</span>
-                            <span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="normal">0</span>
-                        </div>
-                    </button>
-
-                    <button id="btnHardcore" class="btn-menu w-full py-3 bg-red-600 hover:bg-red-500 text-white font-black text-xl border-l-4 border-red-400 shadow-lg shadow-red-900/50">
-                        <div class="flex justify-between items-center px-2">
-                            <span>HARDCORE</span>
-                            <span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="hardcore">0</span>
-                        </div>
-                    </button>
-
-                    <button id="btnScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-black text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 mt-4">
-                        ARCHIVES / CLASSEMENT
-                    </button>
+                    <button id="btnEasy" class="btn-menu w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50"><div class="flex justify-between items-center px-2"><span>FACILE</span><span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="easy">0</span></div></button>
+                    <button id="btnNormal" class="btn-menu w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xl border-l-4 border-blue-400 shadow-lg shadow-blue-900/50"><div class="flex justify-between items-center px-2"><span>NORMAL</span><span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="normal">0</span></div></button>
+                    <button id="btnHardcore" class="btn-menu w-full py-3 bg-red-600 hover:bg-red-500 text-white font-black text-xl border-l-4 border-red-400 shadow-lg shadow-red-900/50"><div class="flex justify-between items-center px-2"><span>HARDCORE</span><span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="hardcore">0</span></div></button>
+                    <button id="btnScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-black text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 mt-4">ARCHIVES / CLASSEMENT</button>
                 </div>
             </div>
         </div>
 
-        <!-- Reintegrated Canvas -->
         <canvas id="gameCanvas"></canvas>
     </div>
 
     <div id="thumb-zone">
-        <div class="flex items-center gap-2 opacity-30 pointer-events-none">
-            <span>Zone de Contrôle</span>
-        </div>
+        <div class="flex items-center gap-2 opacity-30 pointer-events-none"><span>Zone de Contrôle</span></div>
     </div>
 
-    <!-- SCRIPT DU JEU -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, getDocs } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
+    <script>
+        // --- CONFIGURATION FIREBASE (VOS CLÉS) ---
         const firebaseConfig = {
             apiKey: "AIzaSyAwtygeAsSrauNNH38FN4D5nOIHdZ03kYM",
             authDomain: "crushmetal-game.firebaseapp.com",
@@ -307,282 +211,221 @@
             messagingSenderId: "131803629594",
             appId: "1:131803629594:web:53852cb82ca8f4d37269a3"
         };
+        const appId = "crushmetal-v1";
 
-        let app, auth, db, currentUser;
+        let db, currentUser;
+
+        // Initialisation (Mode Compat pour compatibilité fichier local)
         try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            signInAnonymously(auth).then((cred) => {
-                currentUser = cred.user;
-                console.log("Connecté au QG:", currentUser.uid);
-            }).catch((e) => console.warn("Erreur Auth:", e));
+            firebase.initializeApp(firebaseConfig);
+            const auth = firebase.auth();
+            db = firebase.firestore();
+            auth.signInAnonymously().then((u) => {
+                currentUser = u.user;
+                console.log("Connecté QG");
+            }).catch(e => console.warn(e));
         } catch (e) { console.log("Mode hors-ligne", e); }
 
-        window.saveScoreOnline = async function(score, difficulty, pilotName) {
-            if (!db || !currentUser) return;
-            const indicator = document.getElementById('savingIndicator');
-            if(indicator) { indicator.classList.remove('hidden'); indicator.textContent = "Transmission au QG..."; }
-            try {
-                await addDoc(collection(db, 'scores'), {
-                    score: score,
-                    difficulty: difficulty,
-                    pilot: pilotName,
-                    userId: currentUser.uid,
-                    date: new Date().toISOString(),
-                    platform: document.body.classList.contains('pc-mode') ? 'PC' : 'MOBILE'
-                });
-                if(indicator) indicator.textContent = "Score enregistré !";
-            } catch (e) { console.error(e); if(indicator) indicator.textContent = "Erreur transmission."; }
-        };
-
-        window.fetchGlobalLeaderboard = async function(difficulty) {
-            if (!db) return;
-            const list = document.getElementById('globalScoreList');
-            const loader = document.getElementById('loadingScores');
-            list.innerHTML = '';
-            loader.classList.remove('hidden');
-            try {
-                const snapshot = await getDocs(collection(db, 'scores'));
-                let scores = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if(data.difficulty === difficulty) scores.push(data);
-                });
-                scores.sort((a, b) => b.score - a.score);
-                scores = scores.slice(0, 50); 
-                loader.classList.add('hidden');
-                if(scores.length === 0) {
-                    list.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-slate-500">Aucune donnée</td></tr>';
-                    return;
-                }
-                scores.forEach((s, index) => {
-                    const tr = document.createElement('tr');
-                    tr.className = index < 3 ? "bg-slate-800/50 font-bold" : "";
-                    const rankColor = index === 0 ? "text-yellow-400" : (index === 1 ? "text-slate-300" : (index === 2 ? "text-amber-600" : "text-slate-500"));
-                    tr.innerHTML = `<td class="px-2 py-2 ${rankColor}">${index + 1}</td><td class="px-2 py-2 text-white truncate max-w-[100px]">${s.pilot || 'Inconnu'}</td><td class="px-2 py-2 text-right font-mono text-emerald-400">${s.score}</td>`;
-                    list.appendChild(tr);
-                });
-            } catch (e) { console.error(e); loader.textContent = "Erreur de connexion au QG."; }
-        };
-
         document.addEventListener('DOMContentLoaded', () => {
-            // GLOBAL VARIABLES FOR CANVAS LOGIC (Pixel Ratio)
-            let W, H, dpr;
-
+            // PLATFORM
             const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
             const CONFIG = { maxMines: isMobile ? 20 : 40, storagePrefix: isMobile ? 'crushmetal_hs_mobile_' : 'crushmetal_hs_pc_' };
-
-            if (!isMobile) {
-                document.body.classList.add('pc-mode');
-                document.getElementById('platformIndicator').textContent = "MODE PC";
-                document.getElementById('recordTypeLabel').textContent = "PC";
-            } else {
-                document.getElementById('platformIndicator').textContent = "MODE MOBILE";
-                document.getElementById('recordTypeLabel').textContent = "MOBILE";
-            }
+            if (!isMobile) { document.body.classList.add('pc-mode'); document.getElementById('platformIndicator').textContent = "MODE PC"; document.getElementById('recordTypeLabel').textContent = "PC"; } 
+            else { document.getElementById('platformIndicator').textContent = "MODE MOBILE"; document.getElementById('recordTypeLabel').textContent = "MOBILE"; }
             document.getElementById('maxMinesDisplay').textContent = '/' + CONFIG.maxMines;
 
+            // PILOT
             let sailorName = localStorage.getItem('crushmetal_sailor_name') || 'SAILOR';
             document.getElementById('pilotNameDisplay').textContent = sailorName;
             document.getElementById('profileBtn').addEventListener('click', () => {
                 const newName = prompt("Nom de Sailor (Max 10 chars):", sailorName);
-                if(newName && newName.length <= 10) {
-                    sailorName = newName.toUpperCase();
-                    localStorage.setItem('crushmetal_sailor_name', sailorName);
-                    document.getElementById('pilotNameDisplay').textContent = sailorName;
-                }
+                if(newName && newName.length <= 10) { sailorName = newName.toUpperCase(); localStorage.setItem('crushmetal_sailor_name', sailorName); document.getElementById('pilotNameDisplay').textContent = sailorName; }
             });
 
-            function saveGameHistory(score, mode) {
-                let history = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
-                const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-                history.unshift({ score, mode, date, pilot: sailorName });
-                if(history.length > 10) history.pop();
-                localStorage.setItem('crushmetal_history', JSON.stringify(history));
+            // SCORES ONLINE
+            async function saveScoreOnline(score, difficulty) {
+                if(!db || !currentUser) return;
+                const ind = document.getElementById('savingIndicator');
+                if(ind) { ind.classList.remove('hidden'); ind.textContent = "Transmission..."; }
+                try {
+                    await db.collection('scores').add({
+                        score, difficulty, pilot: sailorName, userId: currentUser.uid, date: new Date().toISOString(), platform: isMobile ? 'MOBILE' : 'PC'
+                    });
+                    if(ind) ind.textContent = "Sauvegardé !";
+                } catch(e) { if(ind) ind.textContent = "Erreur."; }
             }
 
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            let audioCtx, nextNoteTime=0, noteIndex=0, baseTempo=128, currentTempo=128, timerID, totalMinesSpawned=0;
-            let soundEnabled = localStorage.getItem('crushmetal_sound') !== 'false';
-            document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
-            
-            const happyBass = ['C2', 'E2', 'G2', 'A2', 'C2', 'E2', 'G2', 'B2'];
-            function getFreq(n,o){const N=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],k=N.indexOf({0:'C',3:'D#',5:'F',7:'G',10:'A#'}[n]||'C');return 440*Math.pow(2,((o-4)*12+(k-9))/12);}
-            function playTone(f,t,d,tm,v=0.1,p=0){if(!soundEnabled||!audioCtx||f<=0)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),pn=audioCtx.createStereoPanner();o.type=t;o.frequency.value=f;o.connect(g);g.connect(pn);pn.connect(audioCtx.destination);pn.pan.value=p;g.gain.setValueAtTime(v,tm);g.gain.exponentialRampToValueAtTime(0.001,tm+d);o.start(tm);o.stop(tm+d);}catch(e){}}
-            function playExplosion(){if(!soundEnabled||!audioCtx)return;try{const t=audioCtx.currentTime,b=audioCtx.createBuffer(1,audioCtx.sampleRate*0.5,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=audioCtx.createBufferSource();n.buffer=b;const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=800;const g=audioCtx.createGain();g.gain.setValueAtTime(0.8,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.4);n.connect(f);f.connect(g);g.connect(audioCtx.destination);n.start(t);}catch(e){}}
-            function scheduler(){if(!soundEnabled)return;while(nextNoteTime<audioCtx.currentTime+0.1){const b=noteIndex%16;if(b%4===0)playTone(150,'triangle',0.1,nextNoteTime,0.5);if(b%2!==0)playTone(8000,'triangle',0.05,nextNoteTime,0.05);playTone(getFreq(happyBass[noteIndex%8],2),'sawtooth',0.15,nextNoteTime,0.15);nextNoteTime+=(60/currentTempo/4);noteIndex++;}timerID=window.setTimeout(scheduler,25);}
-            function initAudio(){if(!audioCtx){try{audioCtx=new AudioContext();}catch(e){}}if(audioCtx?.state==='suspended')audioCtx.resume();}
-            document.getElementById('audioBtn').addEventListener('click',()=>{initAudio();soundEnabled=!soundEnabled;localStorage.setItem('crushmetal_sound',soundEnabled);document.getElementById('audioStrike').style.display=soundEnabled?'none':'flex';if(soundEnabled&&audioCtx){nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();}else clearTimeout(timerID);});
+            async function fetchGlobalLeaderboard(diff) {
+                if(!db) return;
+                const list = document.getElementById('globalScoreList');
+                const loader = document.getElementById('loadingScores');
+                list.innerHTML = ''; loader.classList.remove('hidden');
+                try {
+                    // Note: Firestore queries require index for sorting + filtering. We do client-side filter for simplicity in this prototype.
+                    const snap = await db.collection('scores').get();
+                    let scores = [];
+                    snap.forEach(doc => { const d = doc.data(); if(d.difficulty === diff) scores.push(d); });
+                    scores.sort((a, b) => b.score - a.score);
+                    scores = scores.slice(0, 50);
+                    loader.classList.add('hidden');
+                    if(scores.length === 0) list.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-slate-500">Aucune donnée</td></tr>';
+                    scores.forEach((s, i) => {
+                        const tr = document.createElement('tr');
+                        const col = i===0?'text-yellow-400':(i===1?'text-slate-300':(i===2?'text-amber-600':'text-slate-500'));
+                        tr.innerHTML = `<td class="px-2 py-2 ${col}">${i+1}</td><td class="px-2 py-2 text-white truncate max-w-[100px]">${s.pilot}</td><td class="px-2 py-2 text-right font-mono text-emerald-400">${s.score}</td>`;
+                        list.appendChild(tr);
+                    });
+                } catch(e) { loader.textContent = "Erreur QG."; }
+            }
 
-            const canvas=document.getElementById('gameCanvas'), ctx=canvas.getContext('2d',{alpha:false});
+            // GAME VARS
+            let canvas=document.getElementById('gameCanvas'), ctx=canvas.getContext('2d',{alpha:false});
+            let W, H, dpr;
             let currentDifficulty='normal', animationId, lastTime=0, score=0, gameTime=0, isGameOver=true, foodTimer=0, enemyTimer=0;
-            const player={x:0,y:0,radius:16,speed:300,angle:0}, foods=[], enemies=[], particles=[], keys={ArrowUp:false,ArrowDown:false,ArrowLeft:false,ArrowRight:false,w:false,s:false,a:false,d:false,z:false,q:false};
+            const player={x:0,y:0,radius:16,speed:300,angle:0}, foods=[], enemies=[], particles=[], keys={};
             const touchInput={active:false,originX:0,originY:0,x:0,y:0};
+            const highScores = { easy: localStorage.getItem(CONFIG.storagePrefix+'easy')||0, normal: localStorage.getItem(CONFIG.storagePrefix+'normal')||0, hardcore: localStorage.getItem(CONFIG.storagePrefix+'hardcore')||0 };
 
-            function getHighScores(){return{easy:localStorage.getItem(CONFIG.storagePrefix+'easy')||0,normal:localStorage.getItem(CONFIG.storagePrefix+'normal')||0,hardcore:localStorage.getItem(CONFIG.storagePrefix+'hardcore')||0};}
-            let highScores=getHighScores();
-            function updateBadges(){highScores=getHighScores();document.querySelectorAll('.record-badge').forEach(b=>b.textContent=`Record: ${highScores[b.dataset.mode]}`);}
+            function updateBadges(){ document.querySelectorAll('.record-badge').forEach(b=>b.textContent=`Record: ${highScores[b.dataset.mode]}`); }
             updateBadges();
 
+            // RESIZE
             function resize(){
-                const container = document.getElementById('game-container');
-                if(container.clientWidth > 0){
-                    dpr = window.devicePixelRatio || 1;
-                    W = container.clientWidth;
-                    H = container.clientHeight;
-                    
-                    canvas.width = W * dpr;
-                    canvas.height = H * dpr;
-                    canvas.style.width = `${W}px`;
-                    canvas.style.height = `${H}px`;
-                    
+                const c = document.getElementById('game-container');
+                if(c.clientWidth > 0) {
+                    dpr = window.devicePixelRatio || 1; W = c.clientWidth; H = c.clientHeight;
+                    canvas.width = W * dpr; canvas.height = H * dpr;
+                    canvas.style.width = `${W}px`; canvas.style.height = `${H}px`;
                     ctx.scale(dpr, dpr);
-
-                    if(isGameOver && document.getElementById('gameOverScreen').classList.contains('hidden')) {
-                        drawMenuBackground(); 
-                    }
+                    if(isGameOver && document.getElementById('gameOverScreen').classList.contains('hidden')) drawMenuBackground();
                 }
             }
-            window.addEventListener('resize',resize);
+            window.addEventListener('resize', resize);
 
+            // DRAW
             function drawElephantLogo(ctx,cx,cy){
-                ctx.save();
-                ctx.translate(cx,cy);
-                
-                // Adaptation taille selon si c'est l'icône (512) ou le jeu
+                ctx.save(); ctx.translate(cx,cy);
                 const isIcon = ctx.canvas.width === 512;
-                const baseSize = isIcon ? 512 : Math.min(W, H); // Use logical W/H
-                const s = baseSize/600;
-                
+                const s = (isIcon ? 512 : Math.min(W,H))/600;
                 ctx.scale(s,s);
-
-                ctx.beginPath(); ctx.moveTo(0, -120); ctx.lineTo(110, -70); ctx.lineTo(110, 60); ctx.lineTo(0, 130); ctx.lineTo(-110, 60); ctx.lineTo(-110, -70); ctx.closePath(); ctx.fillStyle = '#1e293b'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = '#475569'; ctx.stroke();
-                ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.moveTo(-60,-50); ctx.lineTo(-140,-90); ctx.lineTo(-130,10); ctx.lineTo(-60,40); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(60,-50); ctx.lineTo(140,-90); ctx.lineTo(130,10); ctx.lineTo(60,40); ctx.fill(); ctx.stroke();
-                ctx.fillStyle = '#cbd5e1'; ctx.beginPath(); ctx.moveTo(-60,-60); ctx.lineTo(60,-60); ctx.lineTo(50,40); ctx.lineTo(20,90); ctx.lineTo(-20,90); ctx.lineTo(-50,40); ctx.closePath(); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(0,-120); ctx.lineTo(110,-70); ctx.lineTo(110,60); ctx.lineTo(0,130); ctx.lineTo(-110,60); ctx.lineTo(-110,-70); ctx.closePath(); ctx.fillStyle='#1e293b'; ctx.fill(); ctx.lineWidth=6; ctx.strokeStyle='#475569'; ctx.stroke();
+                ctx.fillStyle='#94a3b8'; ctx.beginPath(); ctx.moveTo(-60,-50); ctx.lineTo(-140,-90); ctx.lineTo(-130,10); ctx.lineTo(-60,40); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(60,-50); ctx.lineTo(140,-90); ctx.lineTo(130,10); ctx.lineTo(60,40); ctx.fill(); ctx.stroke();
+                ctx.fillStyle='#cbd5e1'; ctx.beginPath(); ctx.moveTo(-60,-60); ctx.lineTo(60,-60); ctx.lineTo(50,40); ctx.lineTo(20,90); ctx.lineTo(-20,90); ctx.lineTo(-50,40); ctx.closePath(); ctx.fill();
                 ctx.beginPath(); ctx.moveTo(-20,60); ctx.bezierCurveTo(-20,130,40,130,40,80); ctx.lineTo(20,80); ctx.bezierCurveTo(20,110,0,110,0,60); ctx.fill();
-                ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.moveTo(-30,60); ctx.quadraticCurveTo(-50,110,-90,90); ctx.lineTo(-35,50); ctx.fill(); ctx.beginPath(); ctx.moveTo(30,60); ctx.quadraticCurveTo(50,110,90,90); ctx.lineTo(35,50); ctx.fill();
-                ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(-40,-20); ctx.lineTo(-10,-10); ctx.lineTo(-40,0); ctx.fill(); ctx.beginPath(); ctx.moveTo(40,-20); ctx.lineTo(10,-10); ctx.lineTo(40,0); ctx.fill();
-                
-                if(!isIcon){
-                    ctx.font = '900 50px "Black Ops One", "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 10;
-                    ctx.fillText("CRUSHMETAL GAME", 0, -150); ctx.shadowBlur = 0;
-                }
+                ctx.fillStyle='#f8fafc'; ctx.beginPath(); ctx.moveTo(-30,60); ctx.quadraticCurveTo(-50,110,-90,90); ctx.lineTo(-35,50); ctx.fill(); ctx.beginPath(); ctx.moveTo(30,60); ctx.quadraticCurveTo(50,110,90,90); ctx.lineTo(35,50); ctx.fill();
+                ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.moveTo(-40,-20); ctx.lineTo(-10,-10); ctx.lineTo(-40,0); ctx.fill(); ctx.beginPath(); ctx.moveTo(40,-20); ctx.lineTo(10,-10); ctx.lineTo(40,0); ctx.fill();
+                if(!isIcon){ ctx.font='900 50px "Black Ops One"'; ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.shadowColor='rgba(0,0,0,0.8)'; ctx.shadowBlur=10; ctx.fillText("CRUSHMETAL GAME",0,-150); ctx.shadowBlur=0; }
+                ctx.restore();
+            }
+            function drawMenuBackground(){ ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#1e293b'; for(let i=0;i<50;i++){ctx.beginPath();ctx.arc(Math.random()*W,Math.random()*H,Math.random()*2,0,Math.PI*2);ctx.fill();} drawElephantLogo(ctx,W/2,H/2-50); }
+
+            function drawSailor(ctx,x,y,r,a){
+                ctx.save(); ctx.translate(x,y); if(Math.abs(a)>1)ctx.scale(-1,1); const s=r/16; ctx.scale(s,s);
+                ctx.beginPath();ctx.ellipse(0,14,10,3,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fill();
+                ctx.fillStyle='#f5d0b0';ctx.fillRect(-6,0,12,14);ctx.fillStyle='#1e3a8a';ctx.beginPath();ctx.moveTo(-10,16);ctx.quadraticCurveTo(0,8,10,16);ctx.lineTo(12,16);ctx.lineTo(0,16);ctx.fill();ctx.fillStyle='#f5d0b0';ctx.beginPath();ctx.arc(0,-2,12,0,Math.PI*2);ctx.fill();
+                ctx.strokeStyle='#eebfa1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-4);ctx.lineTo(3,0);ctx.stroke();
+                ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(3.5,-4,3,0,Math.PI*2);ctx.arc(-3.5,-4,3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#000';ctx.beginPath();ctx.arc(3.5,-4,1.5,0,Math.PI*2);ctx.arc(-3.5,-4,1.5,0,Math.PI*2);ctx.fill();
+                ctx.fillStyle='#1e3a8a';ctx.beginPath();ctx.arc(0,-6,12,Math.PI,0);ctx.lineTo(12,-2);ctx.lineTo(-12,-2);ctx.fill();ctx.fillStyle='#2563eb';ctx.beginPath();ctx.rect(-12,-6,24,4);ctx.fill();ctx.fillStyle='#dc2626';ctx.beginPath();ctx.arc(0,-14,4,0,Math.PI*2);ctx.fill();
                 ctx.restore();
             }
 
-            function drawMenuBackground(){
-                // Use logical dimensions W/H since we scaled the context
-                ctx.fillStyle='#0f172a';
-                ctx.fillRect(0,0,W,H);
-                ctx.fillStyle='#1e293b';
-                for(let i=0;i<50;i++){
-                    ctx.beginPath();
-                    ctx.arc(Math.random()*W,Math.random()*H,Math.random()*2,0,Math.PI*2);
-                    ctx.fill();
-                }
-                drawElephantLogo(ctx,W/2,H/2-50);
-            }
-
-            function startGame(diff){initAudio();currentTempo=baseTempo;totalMinesSpawned=0;if(soundEnabled){clearTimeout(timerID);nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();}currentDifficulty=diff;score=0;gameTime=0;foodTimer=0;enemyTimer=0;player.speed=DIFFICULTIES[diff].playerSpeed;document.getElementById('scoreDisplay').textContent='0';document.getElementById('mineDisplay').innerHTML='1<span class="text-sm text-slate-500">/'+CONFIG.maxMines+'</span>';document.getElementById('highScoreDisplay').textContent=highScores[diff];isGameOver=false;document.getElementById('menuScreen').style.opacity='0';document.getElementById('gameOverScreen').classList.add('hidden');setTimeout(()=>{document.getElementById('menuScreen').style.display='none';},300);document.getElementById('hud').style.opacity='1';
-            // Reset player position
-            player.x=W/2; player.y=H/2;
-            foods.length=0;enemies.length=0;particles.length=0;for(let i=0;i<3;i++)spawnFood();spawnEnemy();lastTime=performance.now();cancelAnimationFrame(animationId);gameLoop(lastTime);}
-            
-            function gameOver(){isGameOver=true;document.body.classList.add('shake-screen');setTimeout(()=>document.body.classList.remove('shake-screen'),500);playExplosion();document.getElementById('hud').style.opacity='0';clearTimeout(timerID);let isNew=false;if(score>highScores[currentDifficulty]){highScores[currentDifficulty]=score;localStorage.setItem(CONFIG.storagePrefix+currentDifficulty,score);updateBadges();isNew=true;}saveGameHistory(score,currentDifficulty);if(typeof window.saveScoreOnline==='function')window.saveScoreOnline(score,currentDifficulty,sailorName);document.getElementById('finalScore').textContent=score;document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];document.getElementById('newRecordBadge').classList.toggle('hidden',!isNew);document.getElementById('noRecordBadge').classList.toggle('hidden',isNew);setTimeout(() => { document.getElementById('gameOverScreen').classList.remove('hidden'); }, 1500);}
-            
-            function spawnFood(){if(foods.length>=5)return;let x,y,ok=false,trys=0;while(!ok&&trys<10){x=50+Math.random()*(W-100);y=50+Math.random()*(H-100);ok=true;for(let f of foods)if(Math.hypot(x-f.x,y-f.y)<100)ok=false;trys++;}foods.push({x,y,radius:8,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,color:'#fbbf24'});}
-            function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMinesSpawned++;if(totalMinesSpawned%10===0)currentTempo+=10;let x,y,trys=0;do{x=20+Math.random()*(W-40);y=20+Math.random()*(H-40);trys++;}while(Math.hypot(x-player.x,y-player.y)<200&&trys<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;}
-            
-            function update(dt){
-                for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2;if(p.life<=0)particles.splice(i,1);}
-                if(isGameOver) return;
-                gameTime+=dt;document.getElementById('timeDisplay').textContent=Math.floor(gameTime)+'s';if(foods.length===0)spawnFood();foodTimer+=dt;if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}enemyTimer+=dt;if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;if(enemies.length<CONFIG.maxMines){document.getElementById('ui-layer').style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>document.getElementById('ui-layer').style.boxShadow="none",200);}}
-                let mx=0,my=0;if(keys.ArrowUp||keys.z||keys.w)my=-1;if(keys.ArrowDown||keys.s)my=1;if(keys.ArrowLeft||keys.q||keys.a)mx=-1;if(keys.ArrowRight||keys.d)mx=1;if(touchInput.active){const dx=touchInput.x-touchInput.originX,dy=touchInput.y-touchInput.originY;if(Math.hypot(dx,dy)>10){mx=dx;my=dy;}}
-                if(mx||my){if(!touchInput.active){const l=Math.hypot(mx,my);if(l>0){mx/=l;my/=l;}}player.x+=mx*player.speed*dt;player.y+=my*player.speed*dt;if(mx<-0.1)player.angle=Math.PI;else if(mx>0.1)player.angle=0;}
-                
-                // Use W and H for boundaries
-                player.x=Math.max(16,Math.min(W-16,player.x));player.y=Math.max(16,Math.min(H-16,player.y));
-                
-                for(let i=foods.length-1;i>=0;i--){let f=foods[i];f.x+=f.vx*dt;f.y+=f.vy*dt;if(f.x<8||f.x>W-8)f.vx*=-1;if(f.y<8||f.y>H-8)f.vy*=-1;if(Math.hypot(player.x-f.x,player.y-f.y)<24){score++;document.getElementById('scoreDisplay').textContent=score;for(let k=0;k<8;k++)particles.push({x:f.x,y:f.y,vx:(Math.random()-.5)*300,vy:(Math.random()-.5)*300,life:1,color:f.color});foods.splice(i,1);}}
-                for(let e of enemies){e.x+=e.vx*dt;e.y+=e.vy*dt;if(e.x<12){e.x=12;e.vx*=-1;}else if(e.x>W-12){e.x=W-12;e.vx*=-1;}if(e.y<12){e.y=12;e.vy*=-1;}else if(e.y>H-12){e.y=H-12;e.vy*=-1;}if(Math.hypot(player.x-e.x,player.y-e.y)<24){for(let k=0;k<20;k++)particles.push({x:player.x,y:player.y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:'#ef4444'});gameOver();return;}}
-            }
-
             function draw(){
-                ctx.fillStyle='#0f172a';
-                // Clear using logical W/H
-                ctx.fillRect(0,0,W,H);
-                
+                ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,W,H);
                 for(let f of foods){ctx.beginPath();ctx.arc(f.x,f.y,8,0,Math.PI*2);ctx.fillStyle=f.color;ctx.fill();}
                 for(let e of enemies){ctx.beginPath();ctx.arc(e.x,e.y,12,0,Math.PI*2);ctx.fillStyle=e.color;ctx.fill();ctx.strokeStyle=e.color;ctx.lineWidth=2;for(let i=0;i<8;i++){const a=(Math.PI/4)*i+gameTime*2;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+Math.cos(a)*16,e.y+Math.sin(a)*16);ctx.stroke();}ctx.fillStyle='rgba(255,255,255,0.3)';ctx.beginPath();ctx.arc(e.x-3,e.y-3,4,0,Math.PI*2);ctx.fill();}
-                ctx.save();ctx.translate(player.x,player.y);if(Math.abs(player.angle)>1)ctx.scale(-1,1);const s=1;ctx.scale(s,s);
-                ctx.beginPath();ctx.ellipse(0,14,10,3,0,0,Math.PI*2);ctx.fillStyle='#0005';ctx.fill();
-                ctx.fillStyle='#f5d0b0';ctx.fillRect(-6,0,12,14);ctx.fillStyle='#1e3a8a';ctx.beginPath();ctx.moveTo(-10,16);ctx.quadraticCurveTo(0,8,10,16);ctx.lineTo(12,16);ctx.lineTo(0,16);ctx.fill();ctx.fillStyle='#f5d0b0';ctx.beginPath();ctx.arc(0,-2,12,0,Math.PI*2);ctx.fill();
-                ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(3.5,-4,3,0,Math.PI*2);ctx.arc(-3.5,-4,3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#000';ctx.beginPath();ctx.arc(3.5,-4,1.5,0,Math.PI*2);ctx.arc(-3.5,-4,1.5,0,Math.PI*2);ctx.fill();
-                ctx.fillStyle='#1e3a8a';ctx.beginPath();ctx.arc(0,-6,12,Math.PI,0);ctx.lineTo(12,-2);ctx.lineTo(-12,-2);ctx.fill();ctx.fillStyle='#2563eb';ctx.beginPath();ctx.rect(-12,-6,24,4);ctx.fill();ctx.fillStyle='#dc2626';ctx.beginPath();ctx.arc(0,-14,4,0,Math.PI*2);ctx.fill();ctx.restore();
+                drawSailor(ctx,player.x,player.y,player.radius,player.angle);
                 for(let p of particles){ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}
             }
 
-            function gameLoop(t){
-                const dt=(t-lastTime)/1000;
-                lastTime=t;
-                update(Math.min(dt,0.1));
-                draw();
-                if(!isGameOver || particles.length > 0) {
-                    animationId=requestAnimationFrame(gameLoop);
-                }
+            // AUDIO
+            let audioCtx, nextNoteTime=0, noteIndex=0, currentTempo=128, timerID, totalMines=0;
+            let soundEnabled = localStorage.getItem('crushmetal_sound') !== 'false';
+            document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const happyBass = ['C2', 'E2', 'G2', 'A2', 'C2', 'E2', 'G2', 'B2'];
+            
+            function initAudio(){if(!audioCtx){try{audioCtx=new AudioContext();}catch(e){}}if(audioCtx?.state==='suspended')audioCtx.resume();}
+            function getFreq(n,o){const N=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],k=N.indexOf({0:'C',3:'D#',5:'F',7:'G',10:'A#'}[n]||'C');return 440*Math.pow(2,((o-4)*12+(k-9))/12);}
+            function playTone(f,t,d,tm,v=0.1){if(!soundEnabled||!audioCtx||f<=0)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),p=audioCtx.createStereoPanner();o.type=t;o.frequency.value=f;o.connect(g);g.connect(p);p.connect(audioCtx.destination);g.gain.setValueAtTime(v,tm);g.gain.exponentialRampToValueAtTime(0.001,tm+d);o.start(tm);o.stop(tm+d);}catch(e){}}
+            function playExplosion(){if(!soundEnabled||!audioCtx)return;try{const t=audioCtx.currentTime,b=audioCtx.createBuffer(1,audioCtx.sampleRate*0.5,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=audioCtx.createBufferSource();n.buffer=b;const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=800;const g=audioCtx.createGain();g.gain.setValueAtTime(0.8,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.4);n.connect(f);f.connect(g);g.connect(audioCtx.destination);n.start(t);}catch(e){}}
+            function scheduler(){if(!soundEnabled)return;while(nextNoteTime<audioCtx.currentTime+0.1){const b=noteIndex%16;if(b%4===0)playTone(150,'triangle',0.1,nextNoteTime,0.5);if(b%2!==0)playTone(8000,'triangle',0.05,nextNoteTime,0.05);playTone(getFreq(happyBass[noteIndex%8],2),'sawtooth',0.15,nextNoteTime,0.15);nextNoteTime+=(60/currentTempo/4);noteIndex++;}timerID=window.setTimeout(scheduler,25);}
+            
+            document.getElementById('audioBtn').addEventListener('click', () => {
+                initAudio(); soundEnabled = !soundEnabled; localStorage.setItem('crushmetal_sound', soundEnabled);
+                document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
+                if(soundEnabled && audioCtx) { nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); } else clearTimeout(timerID);
+            });
+
+            // GAME LOOP
+            function startGame(diff){
+                initAudio(); currentTempo=128; totalMines=0;
+                if(soundEnabled){ clearTimeout(timerID); nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); }
+                currentDifficulty=diff; score=0; gameTime=0; foodTimer=0; enemyTimer=0; player.speed=DIFFICULTIES[diff].playerSpeed;
+                document.getElementById('scoreDisplay').textContent='0'; document.getElementById('mineDisplay').innerHTML='1<span class="text-sm text-slate-500">/'+CONFIG.maxMines+'</span>'; document.getElementById('highScoreDisplay').textContent=highScores[diff];
+                isGameOver=false;
+                document.getElementById('menuScreen').style.opacity='0'; document.getElementById('gameOverScreen').classList.add('hidden');
+                setTimeout(()=>{document.getElementById('menuScreen').style.display='none';},300); document.getElementById('hud').style.opacity='1';
+                player.x=W/2; player.y=H/2; foods.length=0; enemies.length=0; particles.length=0;
+                for(let i=0;i<3;i++)spawnFood(); spawnEnemy();
+                lastTime=performance.now(); cancelAnimationFrame(animationId); gameLoop(lastTime);
             }
 
-            window.addEventListener('keydown',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=true;});window.addEventListener('keyup',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=false;});
-            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            function gameOver(){
+                isGameOver=true; document.body.classList.add('shake-screen'); setTimeout(()=>document.body.classList.remove('shake-screen'),500); playExplosion();
+                document.getElementById('hud').style.opacity='0'; clearTimeout(timerID);
+                let isNew=false; if(score>highScores[currentDifficulty]){ highScores[currentDifficulty]=score; localStorage.setItem(CONFIG.storagePrefix+currentDifficulty,score); updateBadges(); isNew=true; }
+                saveGameHistory(score, currentDifficulty); saveScoreOnline(score, currentDifficulty, sailorName);
+                document.getElementById('finalScore').textContent=score; document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];
+                document.getElementById('newRecordBadge').classList.toggle('hidden',!isNew); document.getElementById('noRecordBadge').classList.toggle('hidden',isNew);
+                setTimeout(() => { document.getElementById('gameOverScreen').classList.remove('hidden'); }, 1500);
+            }
+
+            function update(dt){
+                for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2;if(p.life<=0)particles.splice(i,1);}
+                if(isGameOver)return;
+                gameTime+=dt;document.getElementById('timeDisplay').textContent=Math.floor(gameTime)+'s';
+                if(foods.length===0)spawnFood(); foodTimer+=dt; if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}
+                enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;}
+                
+                let mx=0,my=0; if(keys.ArrowUp||keys.z||keys.w)my=-1;if(keys.ArrowDown||keys.s)my=1;if(keys.ArrowLeft||keys.q||keys.a)mx=-1;if(keys.ArrowRight||keys.d)mx=1;
+                if(touchInput.active){const dx=touchInput.x-touchInput.originX,dy=touchInput.y-touchInput.originY;if(Math.hypot(dx,dy)>10){mx=dx;my=dy;}}
+                if(mx||my){if(!touchInput.active){const l=Math.hypot(mx,my);if(l>0){mx/=l;my/=l;}}player.x+=mx*player.speed*dt;player.y+=my*player.speed*dt;if(mx<-0.1)player.angle=Math.PI;else if(mx>0.1)player.angle=0;}
+                player.x=Math.max(16,Math.min(W-16,player.x));player.y=Math.max(16,Math.min(H-16,player.y));
+
+                for(let i=foods.length-1;i>=0;i--){let f=foods[i];f.x+=f.vx*dt;f.y+=f.vy*dt;if(f.x<8||f.x>W-8)f.vx*=-1;if(f.y<8||f.y>H-8)f.vy*=-1;if(Math.hypot(player.x-f.x,player.y-f.y)<24){score++;document.getElementById('scoreDisplay').textContent=score;for(let k=0;k<8;k++)particles.push({x:f.x,y:f.y,vx:(Math.random()-.5)*300,vy:(Math.random()-.5)*300,life:1,color:f.color});foods.splice(i,1);}}
+                for(let e of enemies){e.x+=e.vx*dt;e.y+=e.vy*dt;if(e.x<12){e.x=12;e.vx*=-1;}else if(e.x>W-12){e.x=W-12;e.vx*=-1;}if(e.y<12){e.y=12;e.vy*=-1;}else if(e.y>H-12){e.y=H-12;e.vy*=-1;}if(Math.hypot(player.x-e.x,player.y-e.y)<24){createParticles(player.x,player.y,'#ef4444',20);gameOver();return;}}
+            }
+            function createParticles(x,y,c,n=8){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:c});}
+            function spawnFood(){if(foods.length>=5)return;let x,y,ok=false,t=0;while(!ok&&t<10){x=50+Math.random()*(W-100);y=50+Math.random()*(H-100);ok=true;for(let f of foods)if(Math.hypot(x-f.x,y-f.y)<100)ok=false;t++;}foods.push({x,y,radius:8,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,color:'#fbbf24'});}
+            function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMines++;if(totalMines%10===0)currentTempo+=10;let x,y,t=0;do{x=20+Math.random()*(W-40);y=20+Math.random()*(H-40);t++;}while(Math.hypot(x-player.x,y-player.y)<200&&t<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;if(enemies.length<CONFIG.maxMines){const l=document.getElementById('ui-layer');l.style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>l.style.boxShadow="none",200);}}
+            
+            function gameLoop(t){const dt=(t-lastTime)/1000;lastTime=t;update(Math.min(dt,0.1));draw();if(!isGameOver||particles.length>0)animationId=requestAnimationFrame(gameLoop);}
+
+            // INPUTS
+            window.addEventListener('keydown',e=>{if(keys[e.key]!==undefined)keys[e.key]=true;});window.addEventListener('keyup',e=>{if(keys[e.key]!==undefined)keys[e.key]=false;});
+            document.body.addEventListener('touchstart',e=>{if(e.target.closest('button'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
-            document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
+            
+            // UI BINDINGS
+            document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));
+            document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
             document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
             
+            // Scores UI
             const scoresScreen = document.getElementById('scoresScreen');
-            const tabLocal = document.getElementById('tabLocal');
-            const tabGlobal = document.getElementById('tabGlobal');
-            const viewLocal = document.getElementById('viewLocal');
-            const viewGlobal = document.getElementById('viewGlobal');
-
-            function resetTabs() {
-                tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
-                tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
-                viewLocal.classList.remove('hidden');
-                viewGlobal.classList.add('hidden');
-            }
-
             document.getElementById('btnScores').addEventListener('click', () => {
-                document.getElementById('scoreStatEasy').textContent = localStorage.getItem(CONFIG.storagePrefix + 'easy') || 0;
-                document.getElementById('scoreStatNormal').textContent = localStorage.getItem(CONFIG.storagePrefix + 'normal') || 0;
-                document.getElementById('scoreStatHardcore').textContent = localStorage.getItem(CONFIG.storagePrefix + 'hardcore') || 0;
-                const history = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
-                const list = document.getElementById('historyList'); list.innerHTML = '';
-                if(history.length === 0) list.innerHTML = '<li class="text-center text-slate-500 italic">Aucune donnée</li>';
-                else history.forEach(h => { list.innerHTML += `<li class="flex justify-between border-b border-slate-700 pb-1"><span>${h.date} <span class="font-bold ml-1">${h.mode.substring(0,1).toUpperCase()}</span></span> <span class="font-mono text-white">${h.score}</span></li>`; });
-                resetTabs(); 
-                document.getElementById('menuScreen').style.display = 'none'; 
-                scoresScreen.classList.remove('hidden');
+                ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
+                const h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
+                const l = document.getElementById('historyList'); l.innerHTML = h.length?h.map(i=>`<li class="flex justify-between border-b border-slate-700 pb-1"><span>${i.date} <span class="font-bold ml-1">${i.mode.substring(0,1).toUpperCase()}</span></span> <span class="font-mono text-white">${i.score}</span></li>`).join(''):'<li class="text-center text-slate-500 italic">Aucune donnée</li>';
+                document.getElementById('tabLocal').click();
+                document.getElementById('menuScreen').style.display = 'none'; scoresScreen.classList.remove('hidden');
             });
-
-            tabLocal.addEventListener('click', () => {
-                tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
-                tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
-                viewLocal.classList.remove('hidden');
-                viewGlobal.classList.add('hidden');
-            });
-
-            tabGlobal.addEventListener('click', () => {
-                tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
-                tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
-                viewGlobal.classList.remove('hidden');
-                viewLocal.classList.add('hidden');
-                if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard('normal');
-            });
-
             document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; drawMenuBackground(); });
-            document.getElementById('leaderboardFilter').addEventListener('change', (e) => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(e.target.value); });
+            
+            document.getElementById('tabLocal').addEventListener('click', () => { document.getElementById('tabLocal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; document.getElementById('tabGlobal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; document.getElementById('viewLocal').classList.remove('hidden'); document.getElementById('viewGlobal').classList.add('hidden'); });
+            document.getElementById('tabGlobal').addEventListener('click', () => { document.getElementById('tabGlobal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; document.getElementById('tabLocal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; document.getElementById('viewGlobal').classList.remove('hidden'); document.getElementById('viewLocal').classList.add('hidden'); fetchGlobalLeaderboard('normal'); });
+            document.getElementById('leaderboardFilter').addEventListener('change', (e) => fetchGlobalLeaderboard(e.target.value));
 
             function genIcon(){const c=document.createElement('canvas');c.width=512;c.height=512;const x=c.getContext('2d');x.fillStyle='#0f172a';x.fillRect(0,0,512,512);drawElephantLogo(x,256,256);const u=c.toDataURL('image/png');document.getElementById('favicon').href=u;document.getElementById('appleicon').href=u;}
             genIcon();resize();setTimeout(drawMenuBackground,100);
