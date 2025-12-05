@@ -40,6 +40,7 @@
             position: relative;
             overflow: hidden;
             background-color: #0f172a;
+            width: 100%;
         }
 
         body.pc-mode #game-container { height: 100vh; }
@@ -220,11 +221,34 @@
                 } catch(e) { console.log("QG: Mode hors-ligne (Init)", e); }
             }
 
-            // GLOBAL VARS
+            // GLOBAL VARS & RESIZE LOGIC
             let canvas = document.getElementById('gameCanvas');
             let ctx = canvas.getContext('2d', { alpha: false });
-            let W, H, dpr;
+            let W = window.innerWidth; // Valeurs par défaut sûres
+            let H = window.innerHeight;
+            let dpr = window.devicePixelRatio || 1;
             
+            function resize(){
+                const container = document.getElementById('game-container');
+                if(container && container.clientWidth > 0) {
+                    dpr = window.devicePixelRatio || 1; 
+                    W = container.clientWidth; 
+                    H = container.clientHeight;
+                    
+                    canvas.width = W * dpr; 
+                    canvas.height = H * dpr;
+                    canvas.style.width = `${W}px`; 
+                    canvas.style.height = `${H}px`;
+                    
+                    ctx.scale(dpr, dpr);
+
+                    if(isGameOver && document.getElementById('gameOverScreen').classList.contains('hidden')) {
+                        drawMenuBackground(); 
+                    }
+                }
+            }
+            window.addEventListener('resize', resize);
+
             // GAME VARS
             let currentDifficulty = 'normal';
             let animationId;
@@ -236,7 +260,7 @@
             let enemyTimer = 0;
             let totalMinesSpawned = 0;
             
-            const player = { x: 0, y: 0, radius: 16, speed: 300, angle: 0 };
+            const player = { x: W/2, y: H/2, radius: 16, speed: 300, angle: 0 };
             let foods = [];
             let enemies = [];
             let particles = [];
@@ -346,9 +370,7 @@
             function drawElephantLogo(ctx,cx,cy){
                 ctx.save(); ctx.translate(cx,cy);
                 const isIcon = ctx.canvas.width === 512;
-                // FIX: Use W/H from parent scope which are set in resize()
-                const refSize = isIcon ? 512 : Math.min(W,H);
-                const s = refSize/600;
+                const s = (isIcon ? 512 : Math.min(W,H))/600;
                 ctx.scale(s,s);
                 ctx.beginPath(); ctx.moveTo(0,-120); ctx.lineTo(110,-70); ctx.lineTo(110,60); ctx.lineTo(0,130); ctx.lineTo(-110,60); ctx.lineTo(-110,-70); ctx.closePath(); ctx.fillStyle='#1e293b'; ctx.fill(); ctx.lineWidth=6; ctx.strokeStyle='#475569'; ctx.stroke();
                 ctx.fillStyle='#94a3b8'; ctx.beginPath(); ctx.moveTo(-60,-50); ctx.lineTo(-140,-90); ctx.lineTo(-130,10); ctx.lineTo(-60,40); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(60,-50); ctx.lineTo(140,-90); ctx.lineTo(130,10); ctx.lineTo(60,40); ctx.fill(); ctx.stroke();
@@ -360,10 +382,7 @@
                 ctx.restore();
             }
             function drawMenuBackground(){ 
-                // Use logical W, H
-                ctx.fillStyle='#0f172a'; 
-                ctx.fillRect(0,0,W,H); 
-                ctx.fillStyle='#1e293b'; 
+                ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#1e293b'; 
                 for(let i=0;i<50;i++){
                     ctx.beginPath();
                     ctx.arc(Math.random()*W,Math.random()*H,Math.random()*2,0,Math.PI*2);
@@ -394,6 +413,8 @@
             let highScores=getHighScores();
             
             function startGame(diff){
+                // Force resize before start to ensure W/H are correct
+                resize(); 
                 initAudioContext(); currentTempo=128; totalMinesSpawned=0;
                 if(soundEnabled && audioCtx){ clearTimeout(timerID); nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); }
                 currentDifficulty=diff; score=0; gameTime=0; foodTimer=0; enemyTimer=0; player.speed=DIFFICULTIES[diff].playerSpeed;
@@ -426,7 +447,11 @@
                 let mx=0,my=0; if(keys.ArrowUp||keys.z||keys.w)my=-1;if(keys.ArrowDown||keys.s)my=1;if(keys.ArrowLeft||keys.q||keys.a)mx=-1;if(keys.ArrowRight||keys.d)mx=1;
                 if(touchInput.active){const dx=touchInput.x-touchInput.originX,dy=touchInput.y-touchInput.originY;if(Math.hypot(dx,dy)>10){mx=dx;my=dy;}}
                 if(mx||my){if(!touchInput.active){const l=Math.hypot(mx,my);if(l>0){mx/=l;my/=l;}}player.x+=mx*player.speed*dt;player.y+=my*player.speed*dt;if(mx<-0.1)player.angle=Math.PI;else if(mx>0.1)player.angle=0;}
-                player.x=Math.max(16,Math.min(W-16,player.x));player.y=Math.max(16,Math.min(H-16,player.y));
+                
+                // BOUNDARY CHECK: ensure player stays in bounds based on W/H
+                player.x=Math.max(16,Math.min(W-16,player.x));
+                player.y=Math.max(16,Math.min(H-16,player.y));
+
                 for(let i=foods.length-1;i>=0;i--){let f=foods[i];f.x+=f.vx*dt;f.y+=f.vy*dt;if(f.x<8||f.x>W-8)f.vx*=-1;if(f.y<8||f.y>H-8)f.vy*=-1;if(Math.hypot(player.x-f.x,player.y-f.y)<24){score++;document.getElementById('scoreDisplay').textContent=score;for(let k=0;k<8;k++)particles.push({x:f.x,y:f.y,vx:(Math.random()-.5)*300,vy:(Math.random()-.5)*300,life:1,color:f.color});foods.splice(i,1);}}
                 for(let e of enemies){e.x+=e.vx*dt;e.y+=e.vy*dt;if(e.x<12){e.x=12;e.vx*=-1;}else if(e.x>W-12){e.x=W-12;e.vx*=-1;}if(e.y<12){e.y=12;e.vy*=-1;}else if(e.y>H-12){e.y=H-12;e.vy*=-1;}if(Math.hypot(player.x-e.x,player.y-e.y)<24){createParticles(player.x,player.y,'#ef4444',20);gameOver();return;}}
             }
@@ -441,22 +466,15 @@
             document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
-            
-            function updateMenuHighScores(){ highScores=getHighScores(); document.querySelectorAll('.record-badge').forEach(b=>b.textContent=`Record: ${highScores[b.dataset.mode]}`); }
-            updateMenuHighScores();
-
             document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
             document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
             
-            // Scores UI Events
             const scoresScreen = document.getElementById('scoresScreen');
             const tabLocal = document.getElementById('tabLocal');
             const tabGlobal = document.getElementById('tabGlobal');
             const viewLocal = document.getElementById('viewLocal');
             const viewGlobal = document.getElementById('viewGlobal');
-            
             function resetTabs() { tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); }
-
             document.getElementById('btnScores').addEventListener('click', () => {
                 ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
                 const h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
@@ -464,15 +482,15 @@
                 resetTabs(); document.getElementById('menuScreen').style.display = 'none'; scoresScreen.classList.remove('hidden');
             });
             document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; drawMenuBackground(); });
-            
-            tabLocal.addEventListener('click', () => { tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); });
-            tabGlobal.addEventListener('click', () => { tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); fetchGlobalLeaderboard('normal'); });
+            document.getElementById('tabLocal').addEventListener('click', () => { document.getElementById('tabLocal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; document.getElementById('tabGlobal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; document.getElementById('viewLocal').classList.remove('hidden'); document.getElementById('viewGlobal').classList.add('hidden'); });
+            document.getElementById('tabGlobal').addEventListener('click', () => { document.getElementById('tabGlobal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; document.getElementById('tabLocal').className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; document.getElementById('viewGlobal').classList.remove('hidden'); document.getElementById('viewLocal').classList.add('hidden'); fetchGlobalLeaderboard('normal'); });
             document.getElementById('leaderboardFilter').addEventListener('change', (e) => fetchGlobalLeaderboard(e.target.value));
 
             function genIcon(){const c=document.createElement('canvas');c.width=512;c.height=512;const x=c.getContext('2d');x.fillStyle='#0f172a';x.fillRect(0,0,512,512);drawElephantLogo(x,256,256);const u=c.toDataURL('image/png');document.getElementById('favicon').href=u;document.getElementById('appleicon').href=u;}
-            genIcon();resize();setTimeout(drawMenuBackground,100);
+            genIcon();
+            resize();
+            setTimeout(drawMenuBackground,100);
         });
     </script>
 </body>
 </html>
-```eof
