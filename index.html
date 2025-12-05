@@ -11,9 +11,10 @@
     <link id="favicon" rel="icon" type="image/png" href="">
     <link id="appleicon" rel="apple-touch-icon" href="">
 
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase (Compat) -->
+    <!-- Firebase Compat Scripts -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
@@ -29,6 +30,7 @@
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
+            height: 100vh; /* Fallback */
             height: 100dvh; 
             display: flex;
             flex-direction: column;
@@ -240,7 +242,7 @@
             const happyBass = ['C2', 'E2', 'G2', 'A2', 'C2', 'E2', 'G2', 'B2'];
 
             let currentDifficulty='normal', animationId, lastTime=0, score=0, gameTime=0, isGameOver=true, foodTimer=0, enemyTimer=0;
-            const player={x:W/2,y:H/2,radius:16,speed:300,angle:0}, foods=[], enemies=[], particles=[], keys={};
+            const player={x:W/2,y:H/2,radius:16,speed:300,angle:0}, foods=[], enemies=[], particles=[];
             const touchInput={active:false,originX:0,originY:0,x:0,y:0};
             
             const DIFFICULTIES={easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:290},normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:330},hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:330}};
@@ -399,7 +401,7 @@
                 if(foods.length===0)spawnFood(); foodTimer+=dt; if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}
                 enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;if(enemies.length<CONFIG.maxMines){document.getElementById('ui-layer').style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>document.getElementById('ui-layer').style.boxShadow="none",200);}}
                 
-                let mx=0,my=0; if(keys.ArrowUp||keys.z||keys.w)my=-1;if(keys.ArrowDown||keys.s)my=1;if(keys.ArrowLeft||keys.q||keys.a)mx=-1;if(keys.ArrowRight||keys.d)mx=1;
+                let mx=0,my=0; if(keys.up)my=-1;if(keys.down)my=1;if(keys.left)mx=-1;if(keys.right)mx=1;
                 if(touchInput.active){const dx=touchInput.x-touchInput.originX,dy=touchInput.y-touchInput.originY;if(Math.hypot(dx,dy)>10){mx=dx;my=dy;}}
                 if(mx||my){if(!touchInput.active){const l=Math.hypot(mx,my);if(l>0){mx/=l;my/=l;}}player.x+=mx*player.speed*dt;player.y+=my*player.speed*dt;if(mx<-0.1)player.angle=Math.PI;else if(mx>0.1)player.angle=0;}
                 player.x=Math.max(16,Math.min(W-16,player.x));player.y=Math.max(16,Math.min(H-16,player.y));
@@ -414,35 +416,54 @@
                 if(!isGameOver || particles.length > 0) animationId=requestAnimationFrame(gameLoop);
             }
 
-            // UI EVENT BINDINGS
-            document.getElementById('profileBtn').addEventListener('click', () => {
-                const newName = prompt("Nom de Sailor (Max 10 chars):", sailorName);
-                if(newName && newName.length <= 10) { sailorName = newName.toUpperCase(); localStorage.setItem('crushmetal_sailor_name', sailorName); document.getElementById('pilotNameDisplay').textContent = sailorName; }
+            // INPUTS & UI
+            // Gestion simplifiée et robuste des entrées
+            const keys = { up: false, down: false, left: false, right: false };
+
+            window.addEventListener('keydown', e => {
+                const k = e.key;
+                if (['ArrowUp', 'w', 'W', 'z', 'Z'].includes(k)) keys.up = true;
+                if (['ArrowDown', 's', 'S'].includes(k)) keys.down = true;
+                if (['ArrowLeft', 'a', 'A', 'q', 'Q'].includes(k)) keys.left = true;
+                if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = true;
+                
+                if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
             });
 
-            document.getElementById('audioBtn').addEventListener('click', () => {
-                initAudioContext(); soundEnabled = !soundEnabled; localStorage.setItem('crushmetal_sound', soundEnabled);
-                document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
-                if(soundEnabled && audioCtx) { nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); } else clearTimeout(timerID);
+            window.addEventListener('keyup', e => {
+                const k = e.key;
+                if (['ArrowUp', 'w', 'W', 'z', 'Z'].includes(k)) keys.up = false;
+                if (['ArrowDown', 's', 'S'].includes(k)) keys.down = false;
+                if (['ArrowLeft', 'a', 'A', 'q', 'Q'].includes(k)) keys.left = false;
+                if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = false;
             });
 
+            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            document.body.addEventListener('touchend',()=>{touchInput.active=false;});
             document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
             document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
-
-            // SCORES UI
+            
             const scoresScreen = document.getElementById('scoresScreen');
-            const tabLocal = document.getElementById('tabLocal'); const tabGlobal = document.getElementById('tabGlobal');
-            const viewLocal = document.getElementById('viewLocal'); const viewGlobal = document.getElementById('viewGlobal');
+            const tabLocal = document.getElementById('tabLocal');
+            const tabGlobal = document.getElementById('tabGlobal');
+            const viewLocal = document.getElementById('viewLocal');
+            const viewGlobal = document.getElementById('viewGlobal');
+
+            function resetTabs() {
+                tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
+                tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
+                viewLocal.classList.remove('hidden');
+                viewGlobal.classList.add('hidden');
+            }
 
             document.getElementById('btnScores').addEventListener('click', () => {
                 ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
                 const h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
                 const l = document.getElementById('historyList'); l.innerHTML = h.length?h.map(i=>`<li class="flex justify-between border-b border-slate-700 pb-1"><span>${i.date} <span class="font-bold ml-1">${i.mode.substring(0,1).toUpperCase()}</span></span> <span class="font-mono text-white">${i.score}</span></li>`).join(''):'<li class="text-center text-slate-500 italic">Aucune donnée</li>';
-                // Reset to local tab
-                tabLocal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active";
-                tabGlobal.className = "flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive";
-                viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden');
-                document.getElementById('menuScreen').style.display = 'none'; scoresScreen.classList.remove('hidden');
+                resetTabs(); 
+                document.getElementById('menuScreen').style.display = 'none'; 
+                scoresScreen.classList.remove('hidden');
             });
 
             document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; drawMenuBackground(); });
@@ -450,23 +471,6 @@
             tabGlobal.addEventListener('click', () => { tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard('normal'); });
             document.getElementById('leaderboardFilter').addEventListener('change', (e) => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(e.target.value); });
 
-            // Input Handlers
-            window.addEventListener('keydown',e=>{
-                const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-                if(keys.hasOwnProperty(key)) {
-                    keys[key]=true;
-                    if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) e.preventDefault();
-                }
-            });
-            window.addEventListener('keyup',e=>{
-                const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-                if(keys.hasOwnProperty(key)) keys[key]=false;
-            });
-            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
-            document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
-            document.body.addEventListener('touchend',()=>{touchInput.active=false;});
-
-            // STARTUP
             function genIcon(){const c=document.createElement('canvas');c.width=512;c.height=512;const x=c.getContext('2d');x.fillStyle='#0f172a';x.fillRect(0,0,512,512);drawElephantLogo(x,256,256);const u=c.toDataURL('image/png');document.getElementById('favicon').href=u;document.getElementById('appleicon').href=u;}
             
             resize(); 
@@ -477,4 +481,3 @@
     </script>
 </body>
 </html>
-```
