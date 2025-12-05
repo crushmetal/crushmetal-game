@@ -14,7 +14,7 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase Compat Scripts (Chargement différé pour ne pas bloquer) -->
+    <!-- Firebase Compat Scripts -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
@@ -30,8 +30,7 @@
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
-            /* Fallback pour anciens navigateurs */
-            height: 100vh; 
+            height: 100vh;
             height: 100dvh; 
             display: flex;
             flex-direction: column;
@@ -95,8 +94,7 @@
             30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
             40%, 60% { transform: translate3d(4px, 0, 0); }
         }
-
-        /* Onglets */
+        
         .tab-active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .tab-inactive { background-color: #1e293b; color: #94a3b8; }
     </style>
@@ -203,7 +201,7 @@
     </div>
 
     <script>
-        // --- CONFIGURATION FIREBASE ---
+        // --- FIREBASE CONFIG (VOS CLES) ---
         const firebaseConfig = {
             apiKey: "AIzaSyAwtygeAsSrauNNH38FN4D5nOIHdZ03kYM",
             authDomain: "crushmetal-game.firebaseapp.com",
@@ -213,11 +211,10 @@
             appId: "1:131803629594:web:53852cb82ca8f4d37269a3"
         };
 
-        // Initialisation Robuste (Supporte le hors-ligne)
         let db = null, currentUser = null;
         
         document.addEventListener('DOMContentLoaded', () => {
-            // Tentative de connexion Firebase uniquement une fois le DOM prêt
+            // INIT FIREBASE
             if (typeof firebase !== 'undefined') {
                 try {
                     firebase.initializeApp(firebaseConfig);
@@ -225,9 +222,9 @@
                     db = firebase.firestore();
                     auth.signInAnonymously().then((u) => {
                         currentUser = u.user;
-                        console.log("QG: Connecté");
-                    }).catch(e => console.log("QG: Mode hors-ligne (Auth échouée)"));
-                } catch(e) { console.log("QG: Mode hors-ligne (Init échouée)"); }
+                        console.log("QG Connecté");
+                    }).catch(e => console.log("QG: Mode hors-ligne (Auth)", e));
+                } catch(e) { console.log("QG: Mode hors-ligne (Init)", e); }
             }
 
             // PLATFORM
@@ -245,14 +242,19 @@
                 if(newName && newName.length <= 10) { sailorName = newName.toUpperCase(); localStorage.setItem('crushmetal_sailor_name', sailorName); document.getElementById('pilotNameDisplay').textContent = sailorName; }
             });
 
-            // SCORES ONLINE
-            async function saveScoreOnline(score, difficulty) {
+            // SCORES
+            async function saveScoreOnline(score, difficulty, pilotName) {
                 if(!db || !currentUser) return;
                 const ind = document.getElementById('savingIndicator');
                 if(ind) { ind.classList.remove('hidden'); ind.textContent = "Transmission..."; }
                 try {
                     await db.collection('scores').add({
-                        score, difficulty, pilot: sailorName, userId: currentUser.uid, date: new Date().toISOString(), platform: isMobile ? 'MOBILE' : 'PC'
+                        score: score,
+                        difficulty: difficulty,
+                        pilot: pilotName || 'SAILOR', // Fallback pour éviter erreur
+                        userId: currentUser.uid,
+                        date: new Date().toISOString(),
+                        platform: isMobile ? 'MOBILE' : 'PC'
                     });
                     if(ind) ind.textContent = "Score enregistré !";
                 } catch(e) { if(ind) ind.textContent = "Erreur transmission."; }
@@ -274,10 +276,10 @@
                     scores.forEach((s, i) => {
                         const tr = document.createElement('tr');
                         const col = i===0?'text-yellow-400':(i===1?'text-slate-300':(i===2?'text-amber-600':'text-slate-500'));
-                        tr.innerHTML = `<td class="px-2 py-2 ${col}">${i+1}</td><td class="px-2 py-2 text-white truncate max-w-[100px]">${s.pilot}</td><td class="px-2 py-2 text-right font-mono text-emerald-400">${s.score}</td>`;
+                        tr.innerHTML = `<td class="px-2 py-2 ${col}">${i+1}</td><td class="px-2 py-2 text-white truncate max-w-[100px]">${s.pilot || 'Inconnu'}</td><td class="px-2 py-2 text-right font-mono text-emerald-400">${s.score}</td>`;
                         list.appendChild(tr);
                     });
-                } catch(e) { loader.textContent = "Erreur QG (Connexion)."; }
+                } catch(e) { loader.textContent = "Erreur QG."; }
             }
 
             // GAME VARS
@@ -376,7 +378,11 @@
                 isGameOver=true; document.body.classList.add('shake-screen'); setTimeout(()=>document.body.classList.remove('shake-screen'),500); playExplosion();
                 document.getElementById('hud').style.opacity='0'; clearTimeout(timerID);
                 let isNew=false; if(score>highScores[currentDifficulty]){ highScores[currentDifficulty]=score; localStorage.setItem(CONFIG.storagePrefix+currentDifficulty,score); updateBadges(); isNew=true; }
-                saveGameHistory(score, currentDifficulty); saveScoreOnline(score, currentDifficulty);
+                
+                // Sauvegardes avec protection try/catch
+                try { saveGameHistory(score, currentDifficulty); } catch(e){}
+                try { saveScoreOnline(score, currentDifficulty, sailorName); } catch(e){}
+
                 document.getElementById('finalScore').textContent=score; document.getElementById('currentRecordDisplay').textContent=highScores[currentDifficulty];
                 document.getElementById('newRecordBadge').classList.toggle('hidden',!isNew); document.getElementById('noRecordBadge').classList.toggle('hidden',isNew);
                 setTimeout(() => { document.getElementById('gameOverScreen').classList.remove('hidden'); }, 1500);
@@ -394,14 +400,15 @@
                 player.x=Math.max(16,Math.min(W-16,player.x));player.y=Math.max(16,Math.min(H-16,player.y));
 
                 for(let i=foods.length-1;i>=0;i--){let f=foods[i];f.x+=f.vx*dt;f.y+=f.vy*dt;if(f.x<8||f.x>W-8)f.vx*=-1;if(f.y<8||f.y>H-8)f.vy*=-1;if(Math.hypot(player.x-f.x,player.y-f.y)<24){score++;document.getElementById('scoreDisplay').textContent=score;for(let k=0;k<8;k++)particles.push({x:f.x,y:f.y,vx:(Math.random()-.5)*300,vy:(Math.random()-.5)*300,life:1,color:f.color});foods.splice(i,1);}}
-                for(let e of enemies){e.x+=e.vx*dt;e.y+=e.vy*dt;if(e.x<12){e.x=12;e.vx*=-1;}else if(e.x>W-12){e.x=W-12;e.vx*=-1;}if(e.y<12){e.y=12;e.vy*=-1;}else if(e.y>H-12){e.y=H-12;e.vy*=-1;}if(Math.hypot(player.x-e.x,player.y-e.y)<24){createParticles(player.x,player.y,'#ef4444',20);gameOver();return;}}
+                for(let e of enemies){e.x+=e.vx*dt;e.y+=e.vy*dt;if(e.x<12){e.x=12;e.vx*=-1;}else if(e.x>W-12){e.x=W-12;e.vx*=-1;}if(e.y<12){e.y=12;e.vy*=-1;}else if(e.y>H-12){e.y=H-12;e.vy*=-1;}if(Math.hypot(player.x-e.x,player.y-e.y)<24){for(let k=0;k<20;k++)particles.push({x:player.x,y:player.y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:'#ef4444'});gameOver();return;}}
             }
             function createParticles(x,y,c,n=8){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:c});}
             function spawnFood(){if(foods.length>=5)return;let x,y,ok=false,t=0;while(!ok&&t<10){x=50+Math.random()*(W-100);y=50+Math.random()*(H-100);ok=true;for(let f of foods)if(Math.hypot(x-f.x,y-f.y)<100)ok=false;t++;}foods.push({x,y,radius:8,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,color:'#fbbf24'});}
-            function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMinesSpawned++;if(totalMinesSpawned%10===0)currentTempo+=10;let x,y,t=0;do{x=20+Math.random()*(W-40);y=20+Math.random()*(H-40);t++;}while(Math.hypot(x-player.x,y-player.y)<200&&t<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;if(enemies.length<CONFIG.maxMines){const l=document.getElementById('ui-layer');l.style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>l.style.boxShadow="none",200);}}
+            function spawnEnemy(){if(enemies.length>=CONFIG.maxMines)return;totalMines++;if(totalMines%10===0)currentTempo+=10;let x,y,t=0;do{x=20+Math.random()*(W-40);y=20+Math.random()*(H-40);t++;}while(Math.hypot(x-player.x,y-player.y)<200&&t<10);let s=DIFFICULTIES[currentDifficulty].baseMineSpeed*(1+gameTime*0.01),c='#ef4444';if(DIFFICULTIES[currentDifficulty].speedVariance){const r=Math.random();if(r<.33){s*=.5;c='#991b1b';}else if(r>.66){s*=1.6;c='#fca5a5';}}enemies.push({x,y,radius:12,vx:(Math.random()<.5?-1:1)*s,vy:(Math.random()<.5?-1:1)*s,color:c});document.getElementById('mineDisplay').innerHTML=`${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;if(enemies.length<CONFIG.maxMines){const l=document.getElementById('ui-layer');l.style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>l.style.boxShadow="none",200);}}
             
             function gameLoop(t){const dt=(t-lastTime)/1000;lastTime=t;update(Math.min(dt,0.1));draw();if(!isGameOver||particles.length>0)animationId=requestAnimationFrame(gameLoop);}
 
+            // INPUTS
             window.addEventListener('keydown',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=true;});window.addEventListener('keyup',e=>{if(keys.hasOwnProperty(e.key))keys[e.key]=false;});
             document.body.addEventListener('touchstart',e=>{if(e.target.closest('button'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
             document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
@@ -435,3 +442,4 @@
     </script>
 </body>
 </html>
+```
