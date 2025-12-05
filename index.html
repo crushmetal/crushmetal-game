@@ -115,6 +115,11 @@
             z-index: 301;
             box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
         }
+        
+        /* Utility text shadow for timer */
+        .text-shadow-strong {
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
     </style>
 </head>
 <body>
@@ -130,7 +135,7 @@
         </div>
     </div>
 
-    <!-- Joystick Global (sorti du container pour pouvoir se superposer à la bottom zone si besoin, mais positionné en absolu par JS) -->
+    <!-- Joystick Global -->
     <div id="joyBase" class="joystick-base"></div>
     <div id="joyStick" class="joystick-stick"></div>
 
@@ -140,15 +145,21 @@
         <!-- HUD LAYER -->
         <div id="ui-layer" class="absolute inset-0 flex flex-col z-hud pointer-events-none" style="padding-top: max(1rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));">
             <div id="hud" class="w-full h-full relative opacity-0 transition-opacity duration-500">
+                <!-- Score & Mines -->
                 <div class="absolute top-0 left-4 text-left">
                     <div><p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Score</p><h1 id="scoreDisplay" class="text-3xl font-bold font-mono text-emerald-400 drop-shadow-lg leading-tight">0</h1></div>
                     <div class="mt-2"><p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Mines</p><h1 id="mineDisplay" class="text-2xl font-bold font-mono text-red-500 drop-shadow-lg leading-tight">0<span class="text-sm text-slate-500" id="maxMinesDisplay">/20</span></h1></div>
                 </div>
+                
+                <!-- TIMER - MODIFIÉ (Plus de cadre) -->
                 <div class="absolute top-0 left-1/2 -translate-x-1/2 text-center">
-                    <div class="bg-slate-800/80 px-4 py-1 rounded-b-lg border-b border-x border-slate-600 backdrop-blur-sm shadow-lg">
-                        <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none mb-1">Temps</p><h1 id="timeDisplay" class="text-2xl font-bold font-mono text-slate-100">0s</h1>
+                    <div class="px-4 py-1">
+                        <!-- Ajout d'une ombre forte pour la lisibilité sans cadre -->
+                        <h1 id="timeDisplay" class="text-3xl font-bold font-mono text-white text-shadow-strong tracking-widest">0s</h1>
                     </div>
                 </div>
+                
+                <!-- Record -->
                 <div class="absolute top-16 right-4 text-right">
                     <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record</p><h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
                 </div>
@@ -257,7 +268,17 @@
                             </select>
                         </div>
                         <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden">Connexion Satellite...</div>
-                        <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2">Plat.</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-200 divide-y divide-slate-700/50"></tbody></table>
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-900">
+                                <tr>
+                                    <th class="px-2 py-2">#</th>
+                                    <th class="px-2 py-2">PSEUDO</th> <!-- Renommé pour clarté -->
+                                    <th class="px-2 py-2">Plat.</th>
+                                    <th class="px-2 py-2 text-right">Score</th>
+                                </tr>
+                            </thead>
+                            <tbody id="globalScoreList" class="text-slate-200 divide-y divide-slate-700/50"></tbody>
+                        </table>
                     </div>
                 </div>
                 <button id="btnCloseScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold uppercase rounded mt-4 shrink-0">FERMER</button>
@@ -424,11 +445,10 @@
             document.body.addEventListener('touchend', handleTouchEnd);
             
             // --- LOGIQUE JEU ---
-            // MODIFICATION DES VITESSES ICI
             const DIFFICULTIES={
-                easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:250}, // Ralenti (290 -> 250)
-                normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:350}, // Accéléré (330 -> 350)
-                hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:350} // Accéléré (330 -> 350)
+                easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:250}, 
+                normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:350}, 
+                hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:350} 
             };
             
             let highScores = { 
@@ -541,6 +561,7 @@
                     const ind = document.getElementById('savingIndicator');
                     ind.classList.remove('hidden'); ind.textContent = "Envoi...";
                     try {
+                        // Utilise bien le sailorName actuel
                         await db.collection('scores').add({
                             score: score, difficulty: diff, pilot: sailorName, userId: currentUser.uid, date: new Date().toISOString(), platform: isMobile?'MOBILE':'PC'
                         });
@@ -661,21 +682,16 @@
                 }
 
                 try {
-                    // On récupère tout (simple query) et on filtre en JS pour éviter les index composites
                     const snapshot = await db.collection('scores').get();
                     let data = [];
                     snapshot.forEach(doc => data.push(doc.data()));
 
-                    // Filtres JS
                     data = data.filter(d => d.difficulty === diff);
                     if(platform !== 'ALL') {
                         data = data.filter(d => d.platform === platform);
                     }
 
-                    // Tri Descendant
                     data.sort((a, b) => b.score - a.score);
-
-                    // Top 50
                     data = data.slice(0, 50);
 
                     if(data.length === 0) {
@@ -683,7 +699,6 @@
                          return;
                     }
 
-                    // Render (escapeHtml simple pour sécurité)
                     const escapeHtml = (text) => {
                       if (!text) return text;
                       return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -692,7 +707,7 @@
                     list.innerHTML = data.map((s, i) => `
                         <tr class="border-b border-slate-800 hover:bg-slate-800/50">
                             <td class="px-2 py-2 text-slate-500 font-mono text-xs">${i+1}</td>
-                            <td class="px-2 py-2 text-white font-bold text-xs">${escapeHtml(s.pilot).substring(0,10)}</td>
+                            <td class="px-2 py-2 text-white font-bold text-xs uppercase">${escapeHtml(s.pilot || 'Inconnu').substring(0,10)}</td>
                             <td class="px-2 py-2 text-slate-400 text-[10px] uppercase">${s.platform || 'PC'}</td>
                             <td class="px-2 py-2 text-right font-mono text-emerald-400 text-sm">${s.score}</td>
                         </tr>
