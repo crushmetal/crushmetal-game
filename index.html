@@ -243,6 +243,7 @@
 
             let currentDifficulty='normal', animationId, lastTime=0, score=0, gameTime=0, isGameOver=true, foodTimer=0, enemyTimer=0;
             const player={x:W/2,y:H/2,radius:16,speed:300,angle:0}, foods=[], enemies=[], particles=[];
+            const keys = { up: false, down: false, left: false, right: false };
             const touchInput={active:false,originX:0,originY:0,x:0,y:0};
             
             const DIFFICULTIES={easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:290},normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:330},hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:330}};
@@ -401,9 +402,38 @@
                 if(foods.length===0)spawnFood(); foodTimer+=dt; if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}
                 enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;if(enemies.length<CONFIG.maxMines){document.getElementById('ui-layer').style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>document.getElementById('ui-layer').style.boxShadow="none",200);}}
                 
-                let mx=0,my=0; if(keys.up)my=-1;if(keys.down)my=1;if(keys.left)mx=-1;if(keys.right)mx=1;
-                if(touchInput.active){const dx=touchInput.x-touchInput.originX,dy=touchInput.y-touchInput.originY;if(Math.hypot(dx,dy)>10){mx=dx;my=dy;}}
-                if(mx||my){if(!touchInput.active){const l=Math.hypot(mx,my);if(l>0){mx/=l;my/=l;}}player.x+=mx*player.speed*dt;player.y+=my*player.speed*dt;if(mx<-0.1)player.angle=Math.PI;else if(mx>0.1)player.angle=0;}
+                // INPUT LOGIC CORRECTION (KEYBOARD)
+                let mx=0,my=0; 
+                if(keys.up) my=-1;
+                if(keys.down) my=1;
+                if(keys.left) mx=-1;
+                if(keys.right) mx=1;
+
+                if(touchInput.active){
+                    const dx=touchInput.x-touchInput.originX;
+                    const dy=touchInput.y-touchInput.originY;
+                    const dist = Math.hypot(dx,dy);
+                    
+                    // Mobile speed fix: Normalize vector
+                    if(dist > 10){ 
+                        mx = dx / dist;
+                        my = dy / dist;
+                    } else {
+                        mx = 0; my = 0;
+                    }
+                } else {
+                    // Keyboard Normalization
+                    const l=Math.hypot(mx,my);
+                    if(l>0){mx/=l;my/=l;}
+                }
+                
+                if(mx||my){
+                    player.x+=mx*player.speed*dt;
+                    player.y+=my*player.speed*dt;
+                    if(mx<-0.1)player.angle=Math.PI;
+                    else if(mx>0.1)player.angle=0;
+                }
+                
                 player.x=Math.max(16,Math.min(W-16,player.x));player.y=Math.max(16,Math.min(H-16,player.y));
 
                 for(let i=foods.length-1;i>=0;i--){let f=foods[i];f.x+=f.vx*dt;f.y+=f.vy*dt;if(f.x<8||f.x>W-8)f.vx*=-1;if(f.y<8||f.y>H-8)f.vy*=-1;if(Math.hypot(player.x-f.x,player.y-f.y)<24){score++;document.getElementById('scoreDisplay').textContent=score;for(let k=0;k<8;k++)particles.push({x:f.x,y:f.y,vx:(Math.random()-.5)*300,vy:(Math.random()-.5)*300,life:1,color:f.color});foods.splice(i,1);}}
@@ -416,31 +446,18 @@
                 if(!isGameOver || particles.length > 0) animationId=requestAnimationFrame(gameLoop);
             }
 
-            // INPUTS & UI
-            // Gestion simplifiée et robuste des entrées
-            const keys = { up: false, down: false, left: false, right: false };
-
-            window.addEventListener('keydown', e => {
-                const k = e.key;
-                if (['ArrowUp', 'w', 'W', 'z', 'Z'].includes(k)) keys.up = true;
-                if (['ArrowDown', 's', 'S'].includes(k)) keys.down = true;
-                if (['ArrowLeft', 'a', 'A', 'q', 'Q'].includes(k)) keys.left = true;
-                if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = true;
-                
-                if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
+            // UI EVENT BINDINGS
+            document.getElementById('profileBtn').addEventListener('click', () => {
+                const newName = prompt("Nom de Sailor (Max 10 chars):", sailorName);
+                if(newName && newName.length <= 10) { sailorName = newName.toUpperCase(); localStorage.setItem('crushmetal_sailor_name', sailorName); document.getElementById('pilotNameDisplay').textContent = sailorName; }
             });
 
-            window.addEventListener('keyup', e => {
-                const k = e.key;
-                if (['ArrowUp', 'w', 'W', 'z', 'Z'].includes(k)) keys.up = false;
-                if (['ArrowDown', 's', 'S'].includes(k)) keys.down = false;
-                if (['ArrowLeft', 'a', 'A', 'q', 'Q'].includes(k)) keys.left = false;
-                if (['ArrowRight', 'd', 'D'].includes(k)) keys.right = false;
+            document.getElementById('audioBtn').addEventListener('click', () => {
+                initAudioContext(); soundEnabled = !soundEnabled; localStorage.setItem('crushmetal_sound', soundEnabled);
+                document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
+                if(soundEnabled && audioCtx) { nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); } else clearTimeout(timerID);
             });
 
-            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
-            document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
-            document.body.addEventListener('touchend',()=>{touchInput.active=false;});
             document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
             document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
             
@@ -470,6 +487,29 @@
             tabLocal.addEventListener('click', () => { tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); });
             tabGlobal.addEventListener('click', () => { tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard('normal'); });
             document.getElementById('leaderboardFilter').addEventListener('change', (e) => { if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(e.target.value); });
+
+            // MANUAL KEY HANDLERS
+            window.addEventListener('keydown', e => {
+                const k = e.key;
+                // ZQSD / Arrows
+                if (k === 'ArrowUp' || k === 'z' || k === 'Z' || k === 'w' || k === 'W') keys.up = true;
+                if (k === 'ArrowDown' || k === 's' || k === 'S') keys.down = true;
+                if (k === 'ArrowLeft' || k === 'q' || k === 'Q' || k === 'a' || k === 'A') keys.left = true;
+                if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.right = true;
+            });
+
+            window.addEventListener('keyup', e => {
+                const k = e.key;
+                if (k === 'ArrowUp' || k === 'z' || k === 'Z' || k === 'w' || k === 'W') keys.up = false;
+                if (k === 'ArrowDown' || k === 's' || k === 'S') keys.down = false;
+                if (k === 'ArrowLeft' || k === 'q' || k === 'Q' || k === 'a' || k === 'A') keys.left = false;
+                if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.right = false;
+            });
+
+            // TOUCH HANDLERS
+            document.body.addEventListener('touchstart',e=>{if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn') || e.target.closest('#profileBtn') || e.target.closest('#btnCloseScores') || e.target.closest('#tabLocal') || e.target.closest('#tabGlobal') || e.target.closest('#leaderboardFilter'))return;e.preventDefault();touchInput.active=true;touchInput.originX=e.touches[0].clientX;touchInput.originY=e.touches[0].clientY;touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            document.body.addEventListener('touchmove',e=>{if(!touchInput.active)return;e.preventDefault();touchInput.x=e.touches[0].clientX;touchInput.y=e.touches[0].clientY;},{passive:false});
+            document.body.addEventListener('touchend',()=>{touchInput.active=false;});
 
             function genIcon(){const c=document.createElement('canvas');c.width=512;c.height=512;const x=c.getContext('2d');x.fillStyle='#0f172a';x.fillRect(0,0,512,512);drawElephantLogo(x,256,256);const u=c.toDataURL('image/png');document.getElementById('favicon').href=u;document.getElementById('appleicon').href=u;}
             
