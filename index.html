@@ -13,6 +13,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Firebase Compat Scripts -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
@@ -20,17 +21,14 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap');
 
-        /* Reset Mobile */
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        /* Reset Mobile Strict */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; user-select: none; -webkit-user-select: none; }
 
         body {
             margin: 0;
             overflow: hidden;
             background-color: #000;
-            /* On laisse touch-action auto pour l'UI, géré manuellement pour le jeu */
             font-family: 'Segoe UI', sans-serif;
-            user-select: none;
-            -webkit-user-select: none;
             height: 100dvh; 
             display: flex;
             flex-direction: column;
@@ -41,31 +39,30 @@
             position: relative;
             overflow: hidden;
             background-color: #0f172a;
-            z-index: 1; /* Base layer */
+            z-index: 1;
         }
 
         body.pc-mode #game-container { height: 100vh; }
 
         canvas { display: block; width: 100%; height: 100%; }
 
-        /* ZONE DE CONTROLE TACTILE */
+        /* Zone de contrôle tactile */
         #thumb-zone {
-            height: 80px;
-            min-height: 80px;
-            background: #111;
+            height: 100px;
+            min-height: 100px;
+            background: #0f172a; /* Fond uni */
+            border-top: 1px solid #1e293b;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #444;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            z-index: 100; /* Au dessus du canvas */
-            cursor: crosshair; 
-            border-top: 1px solid #333;
             padding-bottom: env(safe-area-inset-bottom);
             position: relative;
-            touch-action: none; /* Bloque le scroll ici */
+            z-index: 200; 
+        }
+        
+        /* Pas de changement de couleur au toucher */
+        #thumb-zone:active, #thumb-zone.active-zone {
+            background: #0f172a; 
         }
 
         body.pc-mode #thumb-zone { display: none; }
@@ -76,14 +73,9 @@
             cursor: pointer;
             position: relative;
             overflow: hidden;
-            pointer-events: auto; 
-            user-select: none;
-            z-index: 10;
         }
         .btn-menu:active { transform: skew(-10deg) scale(0.95); }
 
-        .hud-text { text-shadow: 1px 1px 0 #000; }
-        
         .shake-screen { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
         @keyframes shake {
             10%, 90% { transform: translate3d(-1px, 0, 0); }
@@ -92,101 +84,157 @@
             40%, 60% { transform: translate3d(4px, 0, 0); }
         }
 
-        .tab-active { background-color: #4f46e5; color: white; }
-        .tab-inactive { background-color: #1e293b; color: #94a3b8; }
-        .filter-active { background-color: #0ea5e9; color: white; border-color: #0ea5e9; }
-        .filter-inactive { background-color: #1e293b; color: #94a3b8; border-color: #334155; }
-        
-        /* HIERARCHIE Z-INDEX CLAIRE */
-        /* 0: Canvas */
-        /* 10: Game Container Wrapper */
-        /* 50: HUD (Non bloquant) */
-        /* 100: Thumb Zone */
-        /* 200: UI Interactive (Menus, Boutons, Modals) - DOIT ETRE AU DESSUS DE TOUT */
-        
-        .ui-hud { pointer-events: none; z-index: 50; }
-        .ui-interactive { pointer-events: auto; z-index: 200; } 
-        
-        .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; justify-content: center; items-center; z-index: 300; backdrop-filter: blur(5px); }
+        /* Z-INDEX HIERARCHY */
+        .z-canvas { z-index: 0; }
+        .z-hud { z-index: 10; pointer-events: none; }
+        .z-menu-bg { z-index: 40; } 
+        .z-ui-top { z-index: 50; pointer-events: auto; } 
+        .z-overlay { z-index: 100; pointer-events: auto; }
+        .z-modal { z-index: 200; pointer-events: auto; } 
+
+        /* Joystick visualizer - Z-INDEX SUPÉRIEUR À LA ZONE DE CONTRÔLE (200) */
+        .joystick-base {
+            position: absolute;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none;
+            z-index: 300; /* Priorité visuelle absolue */
+        }
+        .joystick-stick {
+            position: absolute;
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: rgba(52, 211, 153, 0.8); /* Emerald brillant */
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none;
+            z-index: 301;
+            box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+        }
     </style>
 </head>
 <body>
 
-    <div id="nameModal" class="modal-overlay hidden ui-interactive">
-        <div class="bg-slate-800 border border-slate-600 p-6 rounded-lg max-w-sm w-full mx-4 text-center shadow-2xl">
-            <h2 class="text-2xl font-black text-white mb-2 font-mono">IDENTIFICATION</h2>
-            <p class="text-slate-400 text-xs mb-4">Entrez votre indicatif Sailor.</p>
-            <input type="text" id="nameInput" maxlength="10" placeholder="PSEUDO" class="w-full bg-slate-900 text-white font-bold text-center py-3 rounded border border-slate-600 mb-4 focus:outline-none focus:border-emerald-500 uppercase">
-            <button id="saveNameBtn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded uppercase">VALIDER</button>
+    <!-- MODAL NOM (Input) -->
+    <div id="nameModal" class="absolute inset-0 bg-black/90 hidden z-modal flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-slate-800 border-2 border-slate-600 p-6 rounded-xl max-w-sm w-full mx-4 text-center shadow-2xl relative">
+            <button id="closeNameModal" class="absolute top-2 right-3 text-slate-400 hover:text-white text-xl p-2">&times;</button>
+            <h2 class="text-2xl font-black text-white mb-2 font-mono tracking-tighter" style="font-family: 'Black Ops One', cursive;">IDENTIFICATION</h2>
+            <p class="text-slate-400 text-xs mb-4 uppercase tracking-widest">Matricule Sailor</p>
+            <input type="text" id="nameInput" maxlength="10" placeholder="VOTRE PSEUDO" class="w-full bg-slate-900 text-white font-bold text-center py-4 rounded border border-slate-600 mb-4 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 uppercase tracking-widest text-lg">
+            <button id="saveNameBtn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded uppercase shadow-lg border-b-4 border-emerald-800 active:border-b-0 active:translate-y-1 transition-all">VALIDER</button>
         </div>
     </div>
+
+    <!-- Joystick Global (sorti du container pour pouvoir se superposer à la bottom zone si besoin, mais positionné en absolu par JS) -->
+    <div id="joyBase" class="joystick-base"></div>
+    <div id="joyStick" class="joystick-stick"></div>
 
     <div id="game-container">
         <div id="platformIndicator" class="absolute bottom-2 right-2 z-10 text-[10px] text-white/20 pointer-events-none uppercase tracking-widest">Chargement...</div>
 
-        <div class="absolute top-4 right-4 flex gap-2 ui-interactive" style="top: max(1rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right));">
-             <button id="profileBtn" class="bg-slate-800/80 hover:bg-slate-700 px-3 py-2 rounded-full border border-white/20 transition-colors shadow-lg flex items-center gap-2 touch-manipulation">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                <span id="pilotNameDisplay" class="text-xs text-white font-mono uppercase hidden sm:inline">SAILOR</span>
-            </button>
-            <button id="audioBtn" class="bg-slate-800/80 hover:bg-slate-700 p-2 rounded-full border border-white/20 transition-colors shadow-lg touch-manipulation">
-                <div class="relative w-6 h-6">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
-                    <div id="audioStrike" class="absolute top-0 left-0 w-full h-full flex items-center justify-center" style="display: flex;"><div class="w-full h-0.5 bg-red-500 rotate-45 box-border border-y border-black"></div></div>
-                </div>
-            </button>
-        </div>
-
-        <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col ui-hud" style="padding-top: max(1rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));">
+        <!-- HUD LAYER -->
+        <div id="ui-layer" class="absolute inset-0 flex flex-col z-hud pointer-events-none" style="padding-top: max(1rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));">
             <div id="hud" class="w-full h-full relative opacity-0 transition-opacity duration-500">
                 <div class="absolute top-0 left-4 text-left">
                     <div><p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Score</p><h1 id="scoreDisplay" class="text-3xl font-bold font-mono text-emerald-400 drop-shadow-lg leading-tight">0</h1></div>
                     <div class="mt-2"><p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Mines</p><h1 id="mineDisplay" class="text-2xl font-bold font-mono text-red-500 drop-shadow-lg leading-tight">0<span class="text-sm text-slate-500" id="maxMinesDisplay">/20</span></h1></div>
                 </div>
                 <div class="absolute top-0 left-1/2 -translate-x-1/2 text-center">
-                    <div class="bg-slate-800/80 px-4 py-1 rounded-b-lg border-b border-x border-slate-600 backdrop-blur-sm">
+                    <div class="bg-slate-800/80 px-4 py-1 rounded-b-lg border-b border-x border-slate-600 backdrop-blur-sm shadow-lg">
                         <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none mb-1">Temps</p><h1 id="timeDisplay" class="text-2xl font-bold font-mono text-slate-100">0s</h1>
                     </div>
                 </div>
-                <div class="absolute top-14 right-4 text-right">
-                    <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record (<span id="recordTypeLabel">...</span>)</p><h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
+                <div class="absolute top-16 right-4 text-right">
+                    <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record</p><h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
                 </div>
             </div>
         </div>
 
-        <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm hidden ui-interactive">
+        <!-- TOP CONTROLS -->
+        <div class="absolute top-4 right-4 flex gap-3 z-ui-top pointer-events-auto" style="top: max(1rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right));">
+             <button id="profileBtn" class="menu-only bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-full border border-slate-600 transition-all shadow-lg flex items-center gap-2 active:scale-95">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                <span id="pilotNameDisplay" class="text-xs text-white font-mono uppercase hidden sm:inline font-bold">SAILOR</span>
+            </button>
+            <button id="audioBtn" class="bg-slate-800 hover:bg-slate-700 w-10 h-10 flex items-center justify-center rounded-full border border-slate-600 transition-colors shadow-lg active:scale-95">
+                <div class="relative w-5 h-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    <div id="audioStrike" class="absolute inset-0 flex items-center justify-center pointer-events-none"><div class="w-full h-0.5 bg-red-500 rotate-45 box-border border-y border-black"></div></div>
+                </div>
+            </button>
+        </div>
+
+        <!-- MENU SCREEN -->
+        <div id="menuScreen" class="absolute inset-0 flex flex-col items-center justify-center z-menu-bg pointer-events-auto">
+             <div class="absolute inset-0" id="menuCanvasBg"></div> 
+            
+            <div class="flex flex-col gap-3 w-full max-w-xs px-6 relative z-10" style="margin-top: 20vh;">
+                <!-- Boutons avec scores forcés en blanc -->
+                <button id="btnEasy" class="btn-menu w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50"><div class="flex justify-between items-center px-2"><span>FACILE</span><span class="text-xs bg-black/20 text-white px-2 py-1 rounded record-badge" data-mode="easy">0</span></div></button>
+                <button id="btnNormal" class="btn-menu w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xl border-l-4 border-blue-400 shadow-lg shadow-blue-900/50"><div class="flex justify-between items-center px-2"><span>NORMAL</span><span class="text-xs bg-black/20 text-white px-2 py-1 rounded record-badge" data-mode="normal">0</span></div></button>
+                <button id="btnHardcore" class="btn-menu w-full py-3 bg-red-600 hover:bg-red-500 text-white font-black text-xl border-l-4 border-red-400 shadow-lg shadow-red-900/50"><div class="flex justify-between items-center px-2"><span>HARDCORE</span><span class="text-xs bg-black/20 text-white px-2 py-1 rounded record-badge" data-mode="hardcore">0</span></div></button>
+                <button id="btnScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-black text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 mt-4">ARCHIVES / CLASSEMENT</button>
+            </div>
+        </div>
+
+        <!-- GAME OVER SCREEN -->
+        <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm hidden z-overlay ui-interactive">
             <div class="text-center w-full max-w-sm px-6">
                 <h2 class="text-4xl font-black text-red-500 mb-2 tracking-tighter uppercase" style="font-family: 'Black Ops One', cursive;">MISSION ÉCHOUÉE</h2>
+                
                 <div class="bg-slate-800 border-2 border-slate-600 rounded-xl p-6 mb-6 shadow-2xl">
-                    <p class="text-slate-400 text-sm uppercase tracking-widest mb-1">Score Final</p><h1 id="finalScore" class="text-6xl font-mono font-bold text-white mb-4">0</h1>
-                    <div id="newRecordBadge" class="hidden bg-amber-500 text-black font-bold px-3 py-1 rounded inline-block text-sm uppercase tracking-wider mb-2">NOUVEAU RECORD !</div>
-                    <div id="noRecordBadge" class="text-slate-500 text-xs uppercase tracking-wide">Record actuel: <span id="currentRecordDisplay">0</span></div>
+                    <p class="text-slate-400 text-sm uppercase tracking-widest mb-1">Score Final</p>
+                    <h1 id="finalScore" class="text-6xl font-mono font-bold text-white mb-4">0</h1>
+                    
+                    <div id="newRecordBadge" class="hidden new-record bg-amber-500 text-white font-bold px-3 py-1 rounded inline-block text-sm uppercase tracking-wider mb-2 shadow-lg">
+                        NOUVEAU RECORD !
+                    </div>
+                    <div id="noRecordBadge" class="text-slate-300 text-xs uppercase tracking-wide">
+                        Record actuel: <span id="currentRecordDisplay" class="text-white font-bold">0</span>
+                    </div>
                     <div id="savingIndicator" class="text-blue-400 text-xs mt-2 hidden">Sauvegarde en ligne...</div>
                 </div>
+
                 <div class="flex flex-col gap-3 w-full">
-                    <button id="btnReplay" class="btn-menu w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50 uppercase">REJOUER</button>
-                    <button id="btnGameOverScores" class="btn-menu w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xl border-l-4 border-blue-400 shadow-lg shadow-blue-900/50 uppercase">CLASSEMENT</button>
-                    <button id="btnReturnMenu" class="btn-menu w-full py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 uppercase">RETOUR AU MENU</button>
+                    <button id="btnReplay" class="btn-menu w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50 uppercase">
+                        REJOUER
+                    </button>
+                    
+                    <button id="btnGameOverScores" class="btn-menu w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xl border-l-4 border-blue-400 shadow-lg shadow-blue-900/50 uppercase">
+                        CLASSEMENT
+                    </button>
+                    
+                    <button id="btnReturnMenu" class="btn-menu w-full py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 uppercase">
+                        RETOUR AU MENU
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div id="scoresScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur hidden ui-interactive">
+        <!-- SCORES SCREEN -->
+        <div id="scoresScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur hidden z-overlay ui-interactive">
             <div class="w-full max-w-md h-full flex flex-col px-6 py-8" style="padding-top: max(3rem, env(safe-area-inset-top));">
                 <h2 class="text-3xl font-black text-white mb-4 tracking-tighter uppercase text-center shrink-0" style="font-family: 'Black Ops One', cursive;">QG / ARCHIVES</h2>
                 
+                <!-- Platform Filters -->
                 <div class="flex justify-center gap-2 mb-2 shrink-0">
-                     <button id="filterPlatAll" class="px-4 py-2 text-xs font-bold rounded border filter-active touch-manipulation">TOUS</button>
-                     <button id="filterPlatMobile" class="px-4 py-2 text-xs font-bold rounded border filter-inactive touch-manipulation">MOBILE</button>
-                     <button id="filterPlatPC" class="px-4 py-2 text-xs font-bold rounded border filter-inactive touch-manipulation">PC</button>
+                     <button id="filterPlatAll" class="px-4 py-2 text-xs font-bold rounded border filter-active touch-manipulation text-white">TOUS</button>
+                     <button id="filterPlatMobile" class="px-4 py-2 text-xs font-bold rounded border filter-inactive touch-manipulation text-slate-400">MOBILE</button>
+                     <button id="filterPlatPC" class="px-4 py-2 text-xs font-bold rounded border filter-inactive touch-manipulation text-slate-400">PC</button>
                 </div>
 
                 <div class="flex gap-2 mb-4 shrink-0">
-                    <button id="tabLocal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation">Mes Scores</button>
-                    <button id="tabGlobal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation">Mondial</button>
+                    <button id="tabLocal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation text-white">Mes Scores</button>
+                    <button id="tabGlobal" class="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation text-slate-400">Mondial</button>
                 </div>
 
                 <div class="bg-slate-800 rounded-lg border border-slate-700 flex-grow overflow-hidden flex flex-col relative">
+                    <!-- Local -->
                     <div id="viewLocal" class="p-4 overflow-y-auto h-full">
                         <h3 class="text-emerald-400 text-xs uppercase tracking-widest mb-4 border-b border-slate-700 pb-1">Statistiques Sailor</h3>
                         <div class="grid grid-cols-3 gap-2 text-center mb-6">
@@ -195,9 +243,10 @@
                             <div class="bg-slate-900/50 p-2 rounded"><p class="text-[10px] text-slate-500">HARD</p><p id="scoreStatHardcore" class="text-xl font-bold text-white">0</p></div>
                         </div>
                         <h3 class="text-slate-400 text-xs uppercase tracking-widest mb-2 border-b border-slate-700 pb-1">Journal de Bord</h3>
-                        <ul id="historyList" class="text-sm text-slate-300 space-y-2"></ul>
+                        <ul id="historyList" class="text-sm text-slate-200 space-y-2"></ul>
                     </div>
 
+                    <!-- Global -->
                     <div id="viewGlobal" class="hidden p-4 overflow-y-auto h-full flex flex-col">
                         <div class="flex justify-between items-center mb-4 gap-2">
                             <h3 class="text-blue-400 text-xs uppercase tracking-widest">Top 50</h3>
@@ -208,28 +257,20 @@
                             </select>
                         </div>
                         <div id="loadingScores" class="text-center py-10 text-slate-500 text-sm hidden">Connexion Satellite...</div>
-                        <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2">Plat.</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-300 divide-y divide-slate-700/50"></tbody></table>
+                        <table class="w-full text-sm text-left"><thead class="text-xs text-slate-500 uppercase bg-slate-900"><tr><th class="px-2 py-2">#</th><th class="px-2 py-2">Sailor</th><th class="px-2 py-2">Plat.</th><th class="px-2 py-2 text-right">Score</th></tr></thead><tbody id="globalScoreList" class="text-slate-200 divide-y divide-slate-700/50"></tbody></table>
                     </div>
                 </div>
                 <button id="btnCloseScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold uppercase rounded mt-4 shrink-0">FERMER</button>
             </div>
         </div>
 
-        <div id="menuScreen" class="absolute inset-0 flex flex-col items-center justify-center ui-interactive">
-            <div class="flex flex-col gap-3 w-full max-w-xs px-6" style="margin-top: 20vh;">
-                <button id="btnEasy" class="btn-menu w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50"><div class="flex justify-between items-center px-2"><span>FACILE</span><span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="easy">0</span></div></button>
-                <button id="btnNormal" class="btn-menu w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xl border-l-4 border-blue-400 shadow-lg shadow-blue-900/50"><div class="flex justify-between items-center px-2"><span>NORMAL</span><span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="normal">0</span></div></button>
-                <button id="btnHardcore" class="btn-menu w-full py-3 bg-red-600 hover:bg-red-500 text-white font-black text-xl border-l-4 border-red-400 shadow-lg shadow-red-900/50"><div class="flex justify-between items-center px-2"><span>HARDCORE</span><span class="text-xs bg-black/20 px-2 py-1 rounded record-badge" data-mode="hardcore">0</span></div></button>
-                <button id="btnScores" class="btn-menu w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-black text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 mt-4">ARCHIVES / CLASSEMENT</button>
-            </div>
-        </div>
-
-        <canvas id="gameCanvas"></canvas>
+        <canvas id="gameCanvas" class="z-canvas"></canvas>
     </div>
 
-    <div id="thumb-zone"><span>Zone de Contrôle</span></div>
+    <div id="thumb-zone"></div>
 
     <script>
+        // CONFIG FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyAwtygeAsSrauNNH38FN4D5nOIHdZ03kYM",
             authDomain: "crushmetal-game.firebaseapp.com",
@@ -242,7 +283,6 @@
         let db = null, currentUser = null;
 
         document.addEventListener('DOMContentLoaded', () => {
-            // --- INITIALIZATION ---
             if (typeof firebase !== 'undefined') {
                 try {
                     firebase.initializeApp(firebaseConfig);
@@ -250,45 +290,72 @@
                     db = firebase.firestore();
                     auth.signInAnonymously().then((u) => {
                         currentUser = u.user;
-                        console.log("QG: Connecté");
                     }).catch(e => console.log("Mode Offline"));
                 } catch(e) { console.log("Mode Offline"); }
             }
 
-            // --- VARIABLES ---
             let canvas = document.getElementById('gameCanvas');
             let ctx = canvas.getContext('2d', { alpha: false });
             let W = window.innerWidth, H = window.innerHeight, dpr = window.devicePixelRatio || 1;
+            let gameState = 'MENU';
             
-            // GLOBAL STATE VARIABLE - VERY IMPORTANT
-            let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, SCORES
-
             const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
             const CONFIG = { maxMines: isMobile ? 20 : 40, storagePrefix: isMobile ? 'crushmetal_hs_mobile_' : 'crushmetal_hs_pc_' };
             
-            if(!isMobile) { document.body.classList.add('pc-mode'); document.getElementById('platformIndicator').textContent = "MODE PC"; document.getElementById('recordTypeLabel').textContent = "PC"; } 
-            else { document.getElementById('platformIndicator').textContent = "MODE MOBILE"; document.getElementById('recordTypeLabel').textContent = "MOBILE"; }
+            if(!isMobile) { 
+                document.body.classList.add('pc-mode'); 
+                document.getElementById('platformIndicator').textContent = "MODE PC"; 
+            } else { 
+                document.getElementById('platformIndicator').textContent = "MODE MOBILE"; 
+            }
             document.getElementById('maxMinesDisplay').textContent = '/' + CONFIG.maxMines;
 
+            // --- GESTION PROFIL ET UI ---
             let sailorName = localStorage.getItem('crushmetal_sailor_name') || 'SAILOR';
             document.getElementById('pilotNameDisplay').textContent = sailorName;
             
-            const updatePilotName = () => {
-                setTimeout(() => {
-                    const newName = prompt("Nom de Sailor (Max 10 chars):", sailorName);
-                    if(newName && newName.length <= 10 && newName.trim() !== "") {
-                        sailorName = newName.toUpperCase().trim();
-                        localStorage.setItem('crushmetal_sailor_name', sailorName);
-                        document.getElementById('pilotNameDisplay').textContent = sailorName;
-                        alert("Nom de Sailor mis à jour : " + sailorName);
-                    }
-                }, 50);
-            };
-            
+            const nameModal = document.getElementById('nameModal');
+            const nameInput = document.getElementById('nameInput');
             const pBtn = document.getElementById('profileBtn');
-            pBtn.addEventListener('click', updatePilotName);
-            pBtn.addEventListener('touchend', (e) => { e.preventDefault(); updatePilotName(); });
+            const saveNameBtn = document.getElementById('saveNameBtn');
+            const closeNameModal = document.getElementById('closeNameModal');
 
+            function updateUIState(state) {
+                const profile = document.getElementById('profileBtn');
+                if(state === 'MENU') {
+                    profile.style.display = 'flex'; 
+                } else {
+                    profile.style.display = 'none'; 
+                }
+            }
+            updateUIState('MENU');
+
+            function openNameModal(e) {
+                if(e && e.type !== 'click') e.preventDefault();
+                e.stopPropagation();
+                if(gameState !== 'MENU') return; 
+                nameInput.value = sailorName;
+                nameModal.classList.remove('hidden');
+            }
+
+            function saveName(e) {
+                e.stopPropagation();
+                const val = nameInput.value.trim().toUpperCase();
+                if(val && val.length <= 10) {
+                    sailorName = val;
+                    localStorage.setItem('crushmetal_sailor_name', sailorName);
+                    document.getElementById('pilotNameDisplay').textContent = sailorName;
+                    nameModal.classList.add('hidden');
+                } else if (!val) {
+                    alert("Entrez un nom valide !");
+                }
+            }
+
+            pBtn.addEventListener('click', openNameModal);
+            saveNameBtn.addEventListener('click', saveName);
+            closeNameModal.addEventListener('click', (e) => { e.stopPropagation(); nameModal.classList.add('hidden'); });
+
+            // --- GESTION AUDIO ---
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             let audioCtx, nextNoteTime=0, noteIndex=0, baseTempo=128, currentTempo=128, timerID;
             let soundEnabled = localStorage.getItem('crushmetal_sound') !== 'false';
@@ -298,8 +365,65 @@
             let currentDifficulty='normal', animationId, lastTime=0, score=0, gameTime=0, isGameOver=true, foodTimer=0, enemyTimer=0;
             const player={x:W/2,y:H/2,radius:16,speed:300,angle:0}, foods=[], enemies=[], particles=[];
             const keys = { up: false, down: false, left: false, right: false };
-            const touchInput={active:false,originX:0,originY:0,x:0,y:0};
             
+            // --- NOUVEAU SYSTÈME DE TOUCH (JOYSTICK DYNAMIQUE FIXE) ---
+            const touchInput={active:false,originX:0,originY:0,x:0,y:0};
+            const joyBase = document.getElementById('joyBase');
+            const joyStick = document.getElementById('joyStick');
+            
+            function handleTouchStart(e) {
+                if(e.target.closest('button') || e.target.closest('input') || e.target.closest('.filter-active') || e.target.closest('select')) return;
+
+                if(gameState === 'PLAYING') {
+                    e.preventDefault(); 
+                    
+                    const touch = e.changedTouches[0];
+                    touchInput.active = true;
+                    touchInput.originX = touch.clientX;
+                    touchInput.originY = touch.clientY;
+                    touchInput.x = touch.clientX;
+                    touchInput.y = touch.clientY;
+
+                    // Feedback visuel du Joystick (avec Z-index corrigé)
+                    joyBase.style.display = 'block';
+                    joyStick.style.display = 'block';
+                    joyBase.style.left = touch.clientX + 'px';
+                    joyBase.style.top = touch.clientY + 'px';
+                    joyStick.style.left = touch.clientX + 'px';
+                    joyStick.style.top = touch.clientY + 'px';
+                }
+            }
+
+            function handleTouchMove(e) {
+                if(!touchInput.active) return;
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                touchInput.x = touch.clientX;
+                touchInput.y = touch.clientY;
+
+                // Visuel
+                const dx = touchInput.x - touchInput.originX;
+                const dy = touchInput.y - touchInput.originY;
+                const dist = Math.min(40, Math.hypot(dx, dy));
+                const angle = Math.atan2(dy, dx);
+                
+                joyStick.style.left = (touchInput.originX + Math.cos(angle) * dist) + 'px';
+                joyStick.style.top = (touchInput.originY + Math.sin(angle) * dist) + 'px';
+            }
+
+            function handleTouchEnd(e) {
+                if(!touchInput.active) return;
+                touchInput.active = false;
+                joyBase.style.display = 'none';
+                joyStick.style.display = 'none';
+            }
+
+            // Ecoute sur BODY pour capturer aussi la zone du bas
+            document.body.addEventListener('touchstart', handleTouchStart, {passive: false});
+            document.body.addEventListener('touchmove', handleTouchMove, {passive: false});
+            document.body.addEventListener('touchend', handleTouchEnd);
+            
+            // --- LOGIQUE JEU ---
             const DIFFICULTIES={easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:290},normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:330},hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:330}};
             
             let highScores = { 
@@ -308,13 +432,24 @@
                 hardcore: localStorage.getItem(CONFIG.storagePrefix+'hardcore')||0 
             };
 
-            // --- FUNCTIONS ---
             function getFreq(n,o){const N=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],k=N.indexOf({0:'C',3:'D#',5:'F',7:'G',10:'A#'}[n]||'C');return 440*Math.pow(2,((o-4)*12+(k-9))/12);}
             function playTone(f,t,d,tm,v=0.1){if(!soundEnabled||!audioCtx)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),p=audioCtx.createStereoPanner();o.type=t;o.frequency.value=f;o.connect(g);g.connect(p);p.connect(audioCtx.destination);g.gain.setValueAtTime(v,tm);g.gain.exponentialRampToValueAtTime(0.001,tm+d);o.start(tm);o.stop(tm+d);}catch(e){}}
             function playExplosion(){if(!soundEnabled||!audioCtx)return;try{const t=audioCtx.currentTime,n=audioCtx.createBufferSource(),b=audioCtx.createBuffer(1,audioCtx.sampleRate*0.5,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;n.buffer=b;const g=audioCtx.createGain();g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.5);n.connect(g);g.connect(audioCtx.destination);n.start(t);}catch(e){}}
             function scheduler(){if(!soundEnabled)return;while(nextNoteTime<audioCtx.currentTime+0.1){const b=noteIndex%16;if(b%4===0)playTone(150,'triangle',0.1,nextNoteTime,0.5);if(b%2!==0)playTone(8000,'triangle',0.05,nextNoteTime,0.05);playTone(getFreq(happyBass[noteIndex%8],2),'sawtooth',0.15,nextNoteTime,0.1);nextNoteTime+=(60/currentTempo/4);noteIndex++;}timerID=window.setTimeout(scheduler,25);}
             function initAudioContext(){if(!audioCtx){try{audioCtx=new AudioContext();}catch(e){}}if(audioCtx?.state==='suspended')audioCtx.resume();}
-            document.getElementById('audioBtn').addEventListener('click',()=>{initAudioContext();soundEnabled=!soundEnabled;localStorage.setItem('crushmetal_sound',soundEnabled);document.getElementById('audioStrike').style.display=soundEnabled?'none':'flex';if(soundEnabled&&audioCtx){nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();}else clearTimeout(timerID);});
+            
+            const audioBtn = document.getElementById('audioBtn');
+            const toggleAudio = (e) => {
+                e.stopPropagation();
+                initAudioContext();
+                soundEnabled = !soundEnabled;
+                localStorage.setItem('crushmetal_sound', soundEnabled);
+                document.getElementById('audioStrike').style.display = soundEnabled ? 'none' : 'flex';
+                if(soundEnabled && audioCtx){
+                    nextNoteTime=audioCtx.currentTime+0.1;noteIndex=0;scheduler();
+                } else clearTimeout(timerID);
+            };
+            audioBtn.addEventListener('click', toggleAudio);
 
             function updateMenuHighScores() {
                 highScores = { easy: localStorage.getItem(CONFIG.storagePrefix+'easy')||0, normal: localStorage.getItem(CONFIG.storagePrefix+'normal')||0, hardcore: localStorage.getItem(CONFIG.storagePrefix+'hardcore')||0 };
@@ -376,9 +511,9 @@
             function createParticles(x,y,c,n=8){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*600,vy:(Math.random()-.5)*600,life:1,color:c});}
 
             function startGame(diff){
-                gameState='PLAYING'; // IMPORTANT STATE CHANGE
-                resize(); 
-                initAudioContext(); currentTempo=128;
+                gameState='PLAYING'; 
+                updateUIState('PLAYING');
+                resize(); initAudioContext(); currentTempo=128;
                 if(soundEnabled && audioCtx){ clearTimeout(timerID); nextNoteTime=audioCtx.currentTime+0.1; noteIndex=0; scheduler(); }
                 currentDifficulty=diff; score=0; gameTime=0; foodTimer=0; enemyTimer=0; player.speed=DIFFICULTIES[diff].playerSpeed;
                 document.getElementById('scoreDisplay').textContent='0'; 
@@ -386,9 +521,8 @@
                 document.getElementById('highScoreDisplay').textContent=highScores[diff];
                 
                 isGameOver=false;
-                document.getElementById('menuScreen').style.display='none'; // HIDE MENU
+                document.getElementById('menuScreen').style.display='none'; 
                 document.getElementById('gameOverScreen').classList.add('hidden');
-                document.getElementById('scoresScreen').classList.add('hidden');
                 document.getElementById('hud').style.opacity='1';
                 
                 player.x=W/2; player.y=H/2; foods.length=0; enemies.length=0; particles.length=0;
@@ -410,8 +544,16 @@
                 }
             }
 
+            function saveGameHistory(score, mode) {
+                const history = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
+                history.unshift({ date: new Date().toLocaleDateString('fr-FR', {day:'numeric', month:'numeric'}), score: score, mode: mode });
+                if(history.length > 10) history.pop();
+                localStorage.setItem('crushmetal_history', JSON.stringify(history));
+            }
+
             function gameOver(){
-                isGameOver=true; gameState='GAMEOVER'; // CHANGE STATE
+                isGameOver=true; gameState='GAMEOVER';
+                updateUIState('GAMEOVER');
                 document.body.classList.add('shake-screen'); setTimeout(()=>document.body.classList.remove('shake-screen'),500); playExplosion();
                 document.getElementById('hud').style.opacity='0'; clearTimeout(timerID);
                 
@@ -443,17 +585,13 @@
                 if(foods.length===0)spawnFood(); foodTimer+=dt; if(foodTimer>=DIFFICULTIES[currentDifficulty].goldSpawnRate){spawnFood();foodTimer=0;}
                 enemyTimer+=dt; if(enemyTimer>=DIFFICULTIES[currentDifficulty].mineSpawnRate){spawnEnemy();enemyTimer=0;if(enemies.length<CONFIG.maxMines){document.getElementById('ui-layer').style.boxShadow="inset 0 0 20px rgba(239, 68, 68, 0.2)";setTimeout(()=>document.getElementById('ui-layer').style.boxShadow="none",200);}}
                 
-                let mx=0,my=0; 
-                if(keys.up) my=-1;
-                if(keys.down) my=1;
-                if(keys.left) mx=-1;
-                if(keys.right) mx=1;
+                let mx=0,my=0; if(keys.up) my=-1; if(keys.down) my=1; if(keys.left) mx=-1; if(keys.right) mx=1;
 
                 if(touchInput.active){
                     const dx=touchInput.x-touchInput.originX;
                     const dy=touchInput.y-touchInput.originY;
                     const dist = Math.hypot(dx,dy);
-                    if(dist > 10){ 
+                    if(dist > 5){ 
                         mx = dx / dist;
                         my = dy / dist;
                     } else {
@@ -482,43 +620,6 @@
                 if(!isGameOver || particles.length > 0) animationId=requestAnimationFrame(gameLoop);
             }
 
-            // INPUTS
-            // TOUCH START HANDLER REWRITTEN FOR ABSOLUTE CLARITY
-            const handleTouch = (e) => {
-                // 1. CHECK IF TOUCHING UI BUTTON
-                if(e.target.closest('.ui-interactive') || e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) {
-                    return; // Let the browser handle the click
-                }
-
-                // 2. IF PLAYING -> MOVE SAILOR
-                if(gameState === 'PLAYING') {
-                    e.preventDefault(); // Prevent scroll ONLY when playing
-                    touchInput.active = true;
-                    touchInput.originX = e.touches[0].clientX;
-                    touchInput.originY = e.touches[0].clientY;
-                    touchInput.x = e.touches[0].clientX;
-                    touchInput.y = e.touches[0].clientY;
-                }
-            };
-
-            // ATTACH TO BOTH CONTAINER AND THUMBZONE TO BE SAFE
-            const gameContainer = document.getElementById('game-container');
-            const thumbZone = document.getElementById('thumb-zone');
-            
-            gameContainer.addEventListener('touchstart', handleTouch, {passive: false});
-            thumbZone.addEventListener('touchstart', handleTouch, {passive: false});
-
-            document.body.addEventListener('touchmove',e=>{
-                if(gameState !== 'PLAYING') return;
-                if(!touchInput.active)return;
-                e.preventDefault();
-                touchInput.x=e.touches[0].clientX;
-                touchInput.y=e.touches[0].clientY;
-            },{passive:false});
-
-            document.body.addEventListener('touchend',()=>{touchInput.active=false;});
-
-            // KEYBOARD
             window.addEventListener('keydown', e => { const k=e.key; if(['ArrowUp','w','W','z','Z'].includes(k))keys.up=true; if(['ArrowDown','s','S'].includes(k))keys.down=true; if(['ArrowLeft','a','A','q','Q'].includes(k))keys.left=true; if(['ArrowRight','d','D'].includes(k))keys.right=true; });
             window.addEventListener('keyup', e => { const k=e.key; if(['ArrowUp','w','W','z','Z'].includes(k))keys.up=false; if(['ArrowDown','s','S'].includes(k))keys.down=false; if(['ArrowLeft','a','A','q','Q'].includes(k))keys.left=false; if(['ArrowRight','d','D'].includes(k))keys.right=false; });
 
@@ -526,6 +627,7 @@
             
             document.getElementById('btnReturnMenu').addEventListener('click',() => {
                 gameState = 'MENU';
+                updateUIState('MENU');
                 document.getElementById('gameOverScreen').classList.add('hidden');
                 document.getElementById('menuScreen').style.display='flex';
                 drawMenuBackground();
@@ -537,7 +639,6 @@
             const viewLocal = document.getElementById('viewLocal');
             const viewGlobal = document.getElementById('viewGlobal');
             const leaderboardFilter = document.getElementById('leaderboardFilter');
-            const platformFilter = document.getElementById('platformFilter');
             let currentPlatformFilter = 'ALL';
 
             const btnAll = document.getElementById('filterPlatAll');
@@ -546,9 +647,11 @@
 
             function setPlatformFilter(p) {
                 currentPlatformFilter = p;
-                [btnAll, btnMob, btnPc].forEach(b => { b.className="px-4 py-2 text-xs font-bold rounded border filter-inactive touch-manipulation"; });
+                [btnAll, btnMob, btnPc].forEach(b => { 
+                    b.className="px-4 py-2 text-xs font-bold rounded border filter-inactive touch-manipulation text-slate-400"; 
+                });
                 const active = p === 'ALL' ? btnAll : (p === 'MOBILE' ? btnMob : btnPc);
-                active.className="px-4 py-2 text-xs font-bold rounded border filter-active touch-manipulation";
+                active.className="px-4 py-2 text-xs font-bold rounded border filter-active touch-manipulation text-white";
                 if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, currentPlatformFilter);
             }
 
@@ -558,12 +661,15 @@
 
             function openScores() {
                 gameState = 'SCORES';
+                updateUIState('SCORES');
                 ['Easy','Normal','Hardcore'].forEach(m=>document.getElementById('scoreStat'+m).textContent=localStorage.getItem(CONFIG.storagePrefix+m.toLowerCase())||0);
                 const h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
                 const l = document.getElementById('historyList'); l.innerHTML = h.length?h.map(i=>`<li class="flex justify-between border-b border-slate-700 pb-1"><span>${i.date} <span class="font-bold ml-1">${i.mode.substring(0,1).toUpperCase()}</span></span> <span class="font-mono text-white">${i.score}</span></li>`).join(''):'<li class="text-center text-slate-500 italic">Aucune donnée</li>';
-                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation";
-                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation";
+                
+                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation text-white";
+                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation text-slate-400";
                 viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden');
+                
                 document.getElementById('menuScreen').style.display = 'none'; 
                 document.getElementById('gameOverScreen').classList.add('hidden');
                 scoresScreen.classList.remove('hidden');
@@ -574,15 +680,20 @@
 
             document.getElementById('btnCloseScores').addEventListener('click', () => { 
                 gameState = 'MENU';
+                updateUIState('MENU');
                 scoresScreen.classList.add('hidden'); 
                 document.getElementById('menuScreen').style.display = 'flex'; 
                 drawMenuBackground(); 
             });
             
-            tabLocal.addEventListener('click', () => { tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation"; tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); });
+            tabLocal.addEventListener('click', () => { 
+                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation text-white"; 
+                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation text-slate-400"; 
+                viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); 
+            });
             tabGlobal.addEventListener('click', () => { 
-                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation"; 
-                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation"; 
+                tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active touch-manipulation text-white"; 
+                tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive touch-manipulation text-slate-400"; 
                 viewGlobal.classList.remove('hidden'); viewLocal.classList.add('hidden'); 
                 if(window.fetchGlobalLeaderboard) window.fetchGlobalLeaderboard(leaderboardFilter.value, currentPlatformFilter); 
             });
@@ -594,4 +705,4 @@
     </script>
 </body>
 </html>
-```eof
+
