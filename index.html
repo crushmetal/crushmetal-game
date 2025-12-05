@@ -102,7 +102,6 @@
 
         <!-- Controls -->
         <div class="absolute top-4 right-4 z-50 flex gap-2 ui-interactive" style="top: max(1rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right));">
-             <!-- ID profileBtn pour le JS -->
              <button id="profileBtn" class="bg-slate-800/80 hover:bg-slate-700 px-3 py-2 rounded-full border border-white/20 transition-colors shadow-lg flex items-center gap-2 touch-manipulation">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                 <span id="pilotNameDisplay" class="text-xs text-white font-mono uppercase hidden sm:inline">SAILOR</span>
@@ -214,7 +213,6 @@
     <div id="thumb-zone" class="ui-interactive"><span>Zone de Contrôle</span></div>
 
     <script>
-        // FIREBASE CONFIG
         const firebaseConfig = {
             apiKey: "AIzaSyAwtygeAsSrauNNH38FN4D5nOIHdZ03kYM",
             authDomain: "crushmetal-game.firebaseapp.com",
@@ -226,9 +224,8 @@
 
         let db = null, currentUser = null;
 
-        // SCRIPT PRINCIPAL (NO MODULE)
         document.addEventListener('DOMContentLoaded', () => {
-            // INIT FIREBASE GLOBAL
+            // --- INITIALIZATION ---
             if (typeof firebase !== 'undefined') {
                 try {
                     firebase.initializeApp(firebaseConfig);
@@ -236,7 +233,7 @@
                     db = firebase.firestore();
                     auth.signInAnonymously().then((u) => {
                         currentUser = u.user;
-                        console.log("QG: Connecté", currentUser.uid);
+                        console.log("QG: Connecté");
                     }).catch(e => console.log("Mode Offline"));
                 } catch(e) { console.log("Mode Offline"); }
             }
@@ -253,11 +250,9 @@
             else { document.getElementById('platformIndicator').textContent = "MODE MOBILE"; document.getElementById('recordTypeLabel').textContent = "MOBILE"; }
             document.getElementById('maxMinesDisplay').textContent = '/' + CONFIG.maxMines;
 
-            // PILOT
             let sailorName = localStorage.getItem('crushmetal_sailor_name') || 'SAILOR';
             document.getElementById('pilotNameDisplay').textContent = sailorName;
             
-            // FIX MOBILE INPUT
             const updatePilotName = () => {
                 setTimeout(() => {
                     const newName = prompt("Nom de Sailor (Max 10 chars):", sailorName);
@@ -267,12 +262,12 @@
                         document.getElementById('pilotNameDisplay').textContent = sailorName;
                         alert("Nom de Sailor mis à jour : " + sailorName);
                     }
-                }, 50); // Petit délai pour éviter les conflits d'UI
+                }, 50);
             };
             
             const pBtn = document.getElementById('profileBtn');
             pBtn.addEventListener('click', updatePilotName);
-            pBtn.addEventListener('touchend', (e) => { e.preventDefault(); updatePilotName(); }); // Force touch
+            pBtn.addEventListener('touchend', (e) => { e.preventDefault(); updatePilotName(); });
 
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             let audioCtx, nextNoteTime=0, noteIndex=0, baseTempo=128, currentTempo=128, timerID;
@@ -406,13 +401,13 @@
                     isNew=true; 
                 }
                 
-                // Local save
+                // Save local history
                 let h = JSON.parse(localStorage.getItem('crushmetal_history') || '[]');
                 h.unshift({ score, mode:currentDifficulty, date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}), pilot:sailorName });
                 if(h.length>10) h.pop();
                 localStorage.setItem('crushmetal_history', JSON.stringify(h));
 
-                // Online save
+                // Online save call
                 saveScoreAndShow(score, currentDifficulty);
 
                 setTimeout(() => { 
@@ -493,7 +488,14 @@
             document.body.addEventListener('touchend',()=>{touchInput.active=false;});
             
             document.getElementById('btnEasy').addEventListener('click',()=>startGame('easy'));document.getElementById('btnNormal').addEventListener('click',()=>startGame('normal'));document.getElementById('btnHardcore').addEventListener('click',()=>startGame('hardcore'));document.getElementById('btnReplay').addEventListener('click',()=>startGame(currentDifficulty));
-            document.getElementById('btnReturnMenu').addEventListener('click',()=>{document.getElementById('gameOverScreen').classList.add('hidden');document.getElementById('menuScreen').style.display='flex';drawMenuBackground();});
+            
+            // NAVIGATION FIX
+            document.getElementById('btnReturnMenu').addEventListener('click',() => {
+                document.getElementById('gameOverScreen').classList.add('hidden');
+                document.getElementById('menuScreen').style.display='flex';
+                document.getElementById('menuScreen').style.opacity='1'; // FORCE OPACITY
+                drawMenuBackground();
+            });
             
             const scoresScreen = document.getElementById('scoresScreen');
             const tabLocal = document.getElementById('tabLocal');
@@ -517,7 +519,7 @@
                 scoresScreen.classList.remove('hidden');
             });
 
-            document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; drawMenuBackground(); });
+            document.getElementById('btnCloseScores').addEventListener('click', () => { scoresScreen.classList.add('hidden'); document.getElementById('menuScreen').style.display = 'flex'; document.getElementById('menuScreen').style.opacity='1'; drawMenuBackground(); });
             
             tabLocal.addEventListener('click', () => { tabLocal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-active"; tabGlobal.className="flex-1 py-2 text-xs font-bold uppercase rounded transition tab-inactive"; viewLocal.classList.remove('hidden'); viewGlobal.classList.add('hidden'); });
             tabGlobal.addEventListener('click', () => { 
@@ -574,3 +576,4 @@
     </script>
 </body>
 </html>
+```eof
