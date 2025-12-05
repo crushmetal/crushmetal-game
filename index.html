@@ -424,7 +424,12 @@
             document.body.addEventListener('touchend', handleTouchEnd);
             
             // --- LOGIQUE JEU ---
-            const DIFFICULTIES={easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:290},normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:330},hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:330}};
+            // MODIFICATION DES VITESSES ICI
+            const DIFFICULTIES={
+                easy:{goldSpawnRate:2.5,mineSpawnRate:5.0,baseMineSpeed:40,speedVariance:false,playerSpeed:250}, // Ralenti (290 -> 250)
+                normal:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:false,playerSpeed:350}, // Accéléré (330 -> 350)
+                hardcore:{goldSpawnRate:5.0,mineSpawnRate:3.0,baseMineSpeed:100,speedVariance:true,playerSpeed:350} // Accéléré (330 -> 350)
+            };
             
             let highScores = { 
                 easy: localStorage.getItem(CONFIG.storagePrefix+'easy')||0, 
@@ -644,6 +649,60 @@
             const btnAll = document.getElementById('filterPlatAll');
             const btnMob = document.getElementById('filterPlatMobile');
             const btnPc = document.getElementById('filterPlatPC');
+
+            // --- NOUVELLE FONCTION DE RECUPERATION DES SCORES ---
+            window.fetchGlobalLeaderboard = async (diff, platform) => {
+                const list = document.getElementById('globalScoreList');
+                list.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-500">Chargement...</td></tr>';
+
+                if (!db) {
+                     list.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Hors ligne</td></tr>';
+                     return;
+                }
+
+                try {
+                    // On récupère tout (simple query) et on filtre en JS pour éviter les index composites
+                    const snapshot = await db.collection('scores').get();
+                    let data = [];
+                    snapshot.forEach(doc => data.push(doc.data()));
+
+                    // Filtres JS
+                    data = data.filter(d => d.difficulty === diff);
+                    if(platform !== 'ALL') {
+                        data = data.filter(d => d.platform === platform);
+                    }
+
+                    // Tri Descendant
+                    data.sort((a, b) => b.score - a.score);
+
+                    // Top 50
+                    data = data.slice(0, 50);
+
+                    if(data.length === 0) {
+                         list.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-500">Aucun score trouvé</td></tr>';
+                         return;
+                    }
+
+                    // Render (escapeHtml simple pour sécurité)
+                    const escapeHtml = (text) => {
+                      if (!text) return text;
+                      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+                    };
+
+                    list.innerHTML = data.map((s, i) => `
+                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                            <td class="px-2 py-2 text-slate-500 font-mono text-xs">${i+1}</td>
+                            <td class="px-2 py-2 text-white font-bold text-xs">${escapeHtml(s.pilot).substring(0,10)}</td>
+                            <td class="px-2 py-2 text-slate-400 text-[10px] uppercase">${s.platform || 'PC'}</td>
+                            <td class="px-2 py-2 text-right font-mono text-emerald-400 text-sm">${s.score}</td>
+                        </tr>
+                    `).join('');
+
+                } catch (e) {
+                    console.error(e);
+                    list.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Erreur de chargement</td></tr>';
+                }
+            };
 
             function setPlatformFilter(p) {
                 currentPlatformFilter = p;
