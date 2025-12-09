@@ -431,12 +431,51 @@
                 ctx.restore();
             }
 
+            function drawJoystick(ctx) {
+                if (!touchInput.active) return;
+
+                const maxDist = 40; // Max distance the handle can move
+                const dx = touchInput.x - touchInput.originX;
+                const dy = touchInput.y - touchInput.originY;
+                const dist = Math.hypot(dx, dy);
+                
+                let drawX = touchInput.x;
+                let drawY = touchInput.y;
+
+                // Clamp the handle position to keep it visually inside/near the base
+                if (dist > maxDist) {
+                    drawX = touchInput.originX + (dx / dist) * maxDist;
+                    drawY = touchInput.originY + (dy / dist) * maxDist;
+                }
+
+                // Draw Base
+                ctx.beginPath();
+                ctx.arc(touchInput.originX, touchInput.originY, 40, 0, Math.PI * 2);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fill();
+
+                // Draw Handle
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, 20, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
             function renderGame(){
                 ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,W,H);
                 for(let f of foods){ctx.beginPath();ctx.arc(f.x,f.y,8,0,Math.PI*2);ctx.fillStyle=f.color;ctx.fill();}
                 for(let e of enemies){ctx.beginPath();ctx.arc(e.x,e.y,12,0,Math.PI*2);ctx.fillStyle=e.color;ctx.fill();ctx.strokeStyle=e.color;ctx.lineWidth=2;for(let i=0;i<8;i++){const a=(Math.PI/4)*i+gameTime*2;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+Math.cos(a)*16,e.y+Math.sin(a)*16);ctx.stroke();}ctx.fillStyle='rgba(255,255,255,0.3)';ctx.beginPath();ctx.arc(e.x-3,e.y-3,4,0,Math.PI*2);ctx.fill();}
                 drawSailor(ctx,player.x,player.y,player.radius,player.angle);
                 for(let p of particles){ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}
+                
+                // Dessiner le joystick par dessus tout le reste
+                drawJoystick(ctx);
             }
 
             function spawnFood(){if(foods.length>=5)return;let x,y,ok=false,t=0;while(!ok&&t<10){x=50+Math.random()*(W-100);y=50+Math.random()*(H-100);ok=true;for(let f of foods)if(Math.hypot(x-f.x,y-f.y)<100)ok=false;t++;}foods.push({x,y,radius:8,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,color:'#fbbf24'});}
@@ -752,4 +791,3 @@
     </script>
 </body>
 </html>
-
